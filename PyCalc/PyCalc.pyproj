@@ -21,7 +21,30 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="MathTypes\Basic\BasicMath.py" />
+    <Compile Include="Config\Checks.py" />
+    <Compile Include="Config\Debug.py" />
+    <Compile Include="MathTypes\Physics\Forces.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="MathTypes\Physics\Measurements_3D.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="MathTypes\Physics\Physics_1D.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="MathTypes\Physics\Physics_2D.py" />
+    <Compile Include="MathTypes\Physics\Physics_3D.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="PyCalc.py" />
+    <Compile Include="Config\RNG.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="MathTypes\Basic\" />
+    <Folder Include="Config\" />
+    <Folder Include="MathTypes\" />
+    <Folder Include="MathTypes\Physics\" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

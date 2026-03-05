@@ -1,51 +1,30 @@
-from random import randint
+from Config import Debug  # Import Debug to access all debug UI functions
 
-def add(start, *args): # 0
-    result = start
-    for num in args:
-        result += num
-    return result
+print("[====]Math Types[====]")  # Print header to identify the debug menu
+print()                          # Print blank line for readability
 
-def sub(start, *args): # 1
-    result = start
-    for num in args:
-        result -= num
-    return result
+print("(1) [==={Basic Math}===]")  # Option 1 — run BasicMathDebug
+print("(2) [==={Physics 1D}===]")  # Option 2 — run Physics1DDebug
+print("(3) [==={Physics 2D}===]")  # Option 3 — run Physics2DDebug
+print("(4) [==={Physics 3D}===]")  # Option 4 — run Physics3DDebug
+print("(5) [==={Forces 2D}===]")  # Option 3 — run Physics2DDebug
+print("(6) [==={Forces 3D}===]")  # Option 4 — run Physics3DDebug
+print()                          # Print blank line for readability
 
-def multi(start, *args): # 2
-    result = start
-    for num in args:
-        result *= num
-    return result
+MathType = int(input("Which Math Type?"))  # Read the user's menu selection as an integer
 
-def div(start, *args): # 3
-    result = start
-    for num in args:
-        result += num
-    return result
-
-def IsEven(var): # 4
-    return var % 2 == 0
-
-def mod(base, var): # 5
-    return base % var
-
-def rand(mi, ma): # 6
-    return randint(mi, ma)
-
-# Debug UI
-
-def debug():
-    results = [0, 1, 2, 3, 4, 5, 6];
-    results[0] = add(int(input("Give Number To Add:")), int(input("Add By:")))
-    results[1] = sub(int(input("Give Number To Subtract:")), int(input("Subtract By:")))
-    results[2] = multi(int(input("Give Number To Multiply:")), int(input("Multiply By:")))
-    results[3] = div(int(input("Give Number To Divide:")), int(input("Divide By:")))
-    results[4] = IsEven(int(input("Give Number To Check If Even:")))
-    results[5] = mod(int(input("Give Number To Modulo:")), int(input("Modulo By:")))
-    results[6] = rand(int(input("Give Min Range For Random Int:")), int(input("Give Max Range For Random Int:")))
-
-    for num, result in enumerate(results):
-        print(num + 1, ":", result)
-
-debug()
+match MathType:  # Switch on the user's choice — each case launches one debug UI
+    case 1:
+        Debug.BasicMathDebug()   # Launch Basic Math debug UI — tests add, sub, multi, div, IsEven, mod, rand
+    case 2:
+        Debug.Physics1DDebug()   # Launch Physics 1D debug UI — tests kinematics functions
+    case 3:
+        Debug.Physics2DDebug()   # Launch Physics 2D debug UI — tests 2D vector and projectile functions
+    case 4:
+        Debug.Physics3DDebug()   # Launch Physics 3D debug UI — tests 3D vector and projectile functions
+    case 5:
+        Debug.Forces2DDebug()    # Launch Forces 2D debug UI — builds a 2D object, adds forces, queries net force and energy
+    case 6:
+        Debug.Forces3DDebug()    # Launch Forces 3D debug UI — builds a 3D object, adds forces, queries net force and energy
+    case _:
+        print("Unknown")         # Notify user that their input did not match any option
