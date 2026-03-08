@@ -55,6 +55,16 @@ def NormalForce(mass, g = 9.8):
 def NormalForceIncline(mass, angle, g = 9.8, isDegrees = True):
     return mass * g * Physics_2D.IHat(1, angle, isDegrees)  # Multiply mass * g by cos(angle) → complete Fn = mg*cos(θ)
 
+# Formula: N = W − ΣF_up
+# Returns the surface normal force on an object in free-body equilibrium
+# weight          = object weight in Newtons (positive = downward)
+# vertical_forces = list of upward force magnitudes (positive = upward)
+# Use this when other vertical forces (cable, thrust, etc.) partially support the weight
+# Example: FreeBodyNormal(30.0, [10.0]) → 20.0 N  (30 N weight with 10 N cable → N = 20 N)
+def FreeBodyNormal(weight, vertical_forces):
+    net_up = sum(vertical_forces)   # Sum all upward forces acting on the object
+    return weight - net_up          # N = Weight − upward forces → complete (positive = surface pushes up)
+
 # Formula: F_parallel = m * g * sin(angle)
 # Returns the component of gravity pulling the object down the incline
 def FrictionForceIncline(mass, angle, g = 9.8, isDegrees = True):
@@ -241,40 +251,64 @@ def FreeFallTime(height, g = 9.8):
 # Formula: T = m * g
 # Returns tension in a rope supporting a stationary hanging mass — equals weight when at rest
 def TensionHanging(mass, g = 9.8):
-    return mass * g                         # Multiply mass by gravity → complete T = mg (no acceleration)
+    T      = mass * g                       # Rope tension → T = mg (equals weight at rest)
+    W      = mass * g                       # Object weight → W = mg (downward)
+    F_net  = 0.0                            # Net force on object → zero (at rest, equilibrium)
+    return T, W, F_net                      # (rope tension, object weight, net force on object)
 
 # Formula: T = m * (g + a)
 # Returns tension in a rope when the object is accelerating upward
 # Use positive a for upward acceleration, negative a for downward acceleration
 def TensionAccelerating(mass, acceleration, g = 9.8):
-    return mass * (g + acceleration)        # Add acceleration to gravity then multiply by mass → complete T = m(g+a)
+    T      = mass * (g + acceleration)      # Rope tension → T = m(g+a)
+    W      = mass * g                       # Object weight → W = mg (downward, unchanged)
+    F_net  = mass * acceleration            # Net force on object → F_net = ma (causes the acceleration)
+    return T, W, F_net                      # (rope tension, object weight, net force on object)
 
 # Formula: T = m * g * cos(angle)
 # Returns tension in a rope at an angle — the vertical component must support the weight
 # Returns the tension magnitude needed to hold the mass at the given angle from vertical
 def TensionAtAngle(mass, angle, g = 9.8, isDegrees = True):
-    cos_a = Physics_2D.IHat(1, angle, isDegrees)  # Get cos(angle) — horizontal component ratio
-    if cos_a == 0:                                 # Guard against division by zero — angle of 90° means infinite tension
-        return 0                                   # Return 0 safely — rope would be horizontal, cannot support weight
-    return (mass * g) / cos_a                      # Divide weight by cos(angle) → complete T = mg/cos(θ)
+    import math as _m
+    cos_a  = Physics_2D.IHat(1, angle, isDegrees)   # cos(θ) — vertical component ratio
+    if cos_a == 0:                                   # Guard against division by zero — 90° rope cannot support weight
+        return 0, 0, 0, mass * g                     # Return zeros for tension components, weight unchanged
+    T      = (mass * g) / cos_a                      # Rope tension magnitude → T = mg/cos(θ)
+    sin_a  = Physics_2D.JHat(1, angle, isDegrees)   # sin(θ) — horizontal component ratio
+    T_x    = T * sin_a                               # Horizontal tension component → T·sin(θ) (pulls object sideways)
+    T_y    = T * cos_a                               # Vertical tension component → T·cos(θ) = mg (supports full weight)
+    W      = mass * g                                # Object weight → W = mg (downward)
+    return T, T_x, T_y, W                            # (rope tension magnitude, horizontal component, vertical component, object weight)
 
 # Formula: T = (2 * m1 * m2 * g) / (m1 + m2)
 # Returns tension in the rope of an Atwood machine — two hanging masses connected over a pulley
 # Returns 0 if total mass is zero to avoid division by zero
 def TensionAtwood(m1, m2, g = 9.8):
-    total_mass = m1 + m2                           # Sum both masses → denominator of Atwood formula
-    if total_mass == 0:                            # Guard against division by zero — no mass means no tension
-        return 0                                   # Return 0 safely
-    return (2 * m1 * m2 * g) / total_mass          # Multiply 2*m1*m2*g divided by total mass → complete T = 2m1m2g/(m1+m2)
+    total_mass = m1 + m2                              # Sum both masses → denominator of Atwood formula
+    if total_mass == 0:                               # Guard against division by zero — no mass means no tension
+        return 0, 0, 0, 0, 0, 0                       # Return zeros safely
+    T       = (2 * m1 * m2 * g) / total_mass          # Rope tension → T = 2m1m2g/(m1+m2)
+    W1      = m1 * g                                  # Weight of mass 1 → W1 = m1g (downward)
+    W2      = m2 * g                                  # Weight of mass 2 → W2 = m2g (downward)
+    a       = ((m1 - m2) * g) / total_mass            # System acceleration → a = (m1-m2)g/(m1+m2)
+    F_net1  = W1 - T                                  # Net force on m1 → weight minus tension (positive = downward)
+    F_net2  = T - W2                                  # Net force on m2 → tension minus weight (positive = upward)
+    return T, W1, W2, a, F_net1, F_net2               # (tension, weight1, weight2, acceleration, net force on m1, net force on m2)
 
 # Formula: a = (m1 - m2) * g / (m1 + m2)
 # Returns the acceleration of an Atwood machine — net force divided by total mass
 # Returns 0 if total mass is zero to avoid division by zero
 def AtwoodAcceleration(m1, m2, g = 9.8):
-    total_mass = m1 + m2                           # Sum both masses → total inertia of the system
-    if total_mass == 0:                            # Guard against division by zero — no mass means no acceleration
-        return 0                                   # Return 0 safely
-    return ((m1 - m2) * g) / total_mass            # Divide net gravitational force by total mass → complete a = (m1-m2)g/(m1+m2)
+    total_mass = m1 + m2                              # Sum both masses → total inertia of the system
+    if total_mass == 0:                               # Guard against division by zero — no mass means no acceleration
+        return 0, 0, 0, 0, 0, 0                       # Return zeros safely
+    a       = ((m1 - m2) * g) / total_mass            # System acceleration → a = (m1-m2)g/(m1+m2)
+    T       = (2 * m1 * m2 * g) / total_mass          # Rope tension → T = 2m1m2g/(m1+m2)
+    W1      = m1 * g                                  # Weight of mass 1 → W1 = m1g
+    W2      = m2 * g                                  # Weight of mass 2 → W2 = m2g
+    F_net1  = W1 - T                                  # Net force on m1 → weight minus tension
+    F_net2  = T - W2                                  # Net force on m2 → tension minus weight
+    return a, T, W1, W2, F_net1, F_net2               # (acceleration, tension, weight1, weight2, net force on m1, net force on m2)
 
 # ============================================================
 # CENTRIPETAL FORCE
@@ -324,6 +358,26 @@ def CircularFrequency(velocity, r):
     if r == 0:                             # Guard against division by zero — no radius means undefined frequency
         return 0                           # Return 0 safely
     return velocity / (2 * math.pi * r)   # Divide velocity by circumference → complete f = v/(2πr)
+
+# Formula: v_max = sqrt(Fc * r / m)
+# Returns maximum speed for circular motion given any centripetal force, radius, and mass
+# General form — use when centripetal force is already known
+# Returns 0 if mass or radius is zero to avoid division by zero
+def MaxCircularSpeed(centripetal_force, r, mass):
+    if mass == 0 or r == 0:                          # Guard against division by zero
+        return 0
+    return math.sqrt((centripetal_force * r) / mass) # v = sqrt(Fc*r/m) → complete max speed
+
+# Formula: v_max = sqrt(μ * g * r)
+# Returns maximum speed before sliding in circular motion on a flat surface
+# Friction provides the centripetal force → μmg = mv²/r → v = sqrt(μgr)
+# mass cancels — result is independent of mass
+# Returns 0 if radius is zero to avoid division by zero
+# Example: MaxCircularSpeedFromFriction(0.7, 10) → 8.28 m/s
+def MaxCircularSpeedFromFriction(mu, r, g = 9.8):
+    if r == 0:                              # Guard against division by zero
+        return 0
+    return math.sqrt(mu * g * r)           # v_max = sqrt(μgr) → complete max speed before sliding
 
 # ============================================================
 # EQUILIBRIUM
@@ -426,7 +480,7 @@ class Force2D:
             self.magnitude = magnitude                              # Use provided magnitude directly
 
         if angle == 0:                                              # If angle not provided...
-            self.angle = Physics_2D.VectorAngle2D(x, y)            # Derive angle from components → atan2(y, x)
+            self.angle = math.degrees(math.atan2(y, x))                # Derive angle from components → atan2(y, x)
         else:
             self.angle = angle                                      # Use provided angle directly
 
@@ -474,7 +528,7 @@ class Forces2D:
             Fy += Physics_2D.JHat(f.magnitude, f.angle)            # Add Y component of this force → magnitude * sin(angle)
 
         magnitude = math.sqrt(Fx**2 + Fy**2)                       # Calculate net magnitude from summed components → sqrt(Fx² + Fy²)
-        angle = Physics_2D.VectorAngle2D(Fx, Fy)                   # Calculate net angle from summed components → atan2(Fy, Fx)
+        angle = math.degrees(math.atan2(Fy, Fx))                   # Calculate net angle from summed components → atan2(Fy, Fx)
 
         return Force2D(Fx, Fy, angle, magnitude)                    # Return a new Force2D representing the net force → complete Σf
 
@@ -558,7 +612,8 @@ class Force3D:
             self.magnitude = magnitude                                      # Use provided magnitude directly
 
         if angle == 0:                                                      # If angle not provided...
-            self.angle, self.phi = Physics_3D.VectorAngle3D(x, y, z)       # Derive both angles from components → atan2 for theta and phi
+            self.angle = math.degrees(math.atan2(y, x))                     # Derive azimuth angle → atan2(y, x)
+            self.phi   = math.degrees(math.atan2(z, math.sqrt(x**2+y**2))) # Derive elevation angle → atan2(z, √(x²+y²))
         else:
             self.angle = angle                                              # Use provided azimuth angle directly
             self.phi = phi                                                  # Use provided elevation angle directly
@@ -610,7 +665,8 @@ class Forces3D:
             Fz += Physics_3D.KHat(f.magnitude, f.angle, f.phi)             # Add Z component of this force → magnitude * sin(phi) * cos(angle)
 
         magnitude = math.sqrt(Fx**2 + Fy**2 + Fz**2)                      # Calculate net magnitude from summed components → sqrt(Fx² + Fy² + Fz²)
-        angle, phi = Physics_3D.VectorAngle3D(Fx, Fy, Fz)                  # Calculate net angles from summed components → theta and phi
+        angle = math.degrees(math.atan2(Fy, Fx))                          # Azimuth angle → atan2(Fy, Fx)
+        phi   = math.degrees(math.atan2(Fz, math.sqrt(Fx**2 + Fy**2)))   # Elevation angle → atan2(Fz, √(Fx²+Fy²))
 
         return Force3D(Fx, Fy, Fz, angle, phi, magnitude)                  # Return a new Force3D representing the net force → complete Σf
 
@@ -668,3 +724,133 @@ class Forces3D:
         force_zero = net.magnitude < tolerance                              # Check if net force magnitude is effectively zero
         is_moving  = abs(self.velocity) > tolerance                        # Check that object has nonzero velocity
         return force_zero and is_moving                                     # Forces balanced AND moving → dynamic equilibrium
+
+# ============================================================
+# OFF-AXIS APPLIED FORCE (force pushed at angle below horizontal)
+# ============================================================
+
+# Formula: N = mg + F·sin(θ)
+# Returns normal force when a force is applied downward at an angle to the horizontal
+# The vertical component of the applied force adds to the weight, increasing the normal force
+# mass           = object mass (kg)
+# applied_force  = magnitude of the applied force (N)
+# angle          = angle below the horizontal (degrees by default)
+# Example: NormalForceOffAxis(3.5, 15, 40) → 43.94 N
+def NormalForceOffAxis(mass, applied_force, angle, g = 9.8, isDegrees = True):
+    weight   = mass * g                                                 # Calculate weight → mg (downward)
+    sin_a    = Physics_2D.JHat(1, angle, isDegrees)                    # Get sin(angle) → vertical component ratio
+    return weight + applied_force * sin_a                               # Add vertical push component to weight → N = mg + F·sin(θ)
+
+# Formula: Ff = μ · N = μ · (mg + F·sin(θ))
+# Returns friction force when a force is applied downward at an angle
+# Friction increases because the normal force is augmented by the vertical push component
+def FrictionForceOffAxis(mass, mu, applied_force, angle, g = 9.8, isDegrees = True):
+    N = NormalForceOffAxis(mass, applied_force, angle, g, isDegrees)   # Get augmented normal force → mg + F·sin(θ)
+    return mu * N                                                       # Multiply friction coefficient by normal force → Ff = μN
+
+# Formula: a = (F·cos(θ) − Ff) / m
+# Returns net horizontal acceleration when force is applied at an angle below horizontal
+# Net force is the horizontal push component minus kinetic friction
+# Returns 0 if mass is zero to avoid division by zero
+def AccelerationOffAxis(mass, mu, applied_force, angle, g = 9.8, isDegrees = True):
+    if mass == 0:                                                       # Guard against division by zero
+        return 0
+    Ff  = FrictionForceOffAxis(mass, mu, applied_force, angle, g, isDegrees)  # Get friction force → μ(mg + F·sinθ)
+    cos_a = Physics_2D.IHat(1, angle, isDegrees)                       # Get cos(angle) → horizontal component ratio
+    Fx  = applied_force * cos_a - Ff                                   # Net horizontal force → F·cos(θ) − Ff
+    return Fx / mass                                                    # Divide by mass → complete a = Fx/m
+
+# Formula: v² = u² + 2·a·d  →  v = sqrt(u² + 2·a·d)
+# Returns the final speed after travelling distance d from initial speed u
+# under a constant net acceleration a
+# Works for any constant-acceleration scenario — not limited to friction
+# Returns 0 if result would be negative (decelerated to a stop before reaching d)
+# u = initial speed (m/s), a = net acceleration (m/s²), d = distance (m)
+def FinalSpeedFromDistance(u, a, d):
+    v_sq = (u ** 2) + (2 * a * d)  # Kinematic equation → v² = u² + 2ad
+    if v_sq <= 0:                   # Object stops before reaching d — no final speed
+        return 0.0
+    return v_sq ** 0.5              # Square root → complete v
+
+# Formula: a = (F − μmg) / m,  then  v = sqrt(u² + 2·a·d)
+# Returns (v, a, Ff, N) — final speed, net acceleration, friction force, normal force
+# after pushing a flat-surface object with force F across distance d
+# u = initial speed (0 if starting from rest), d = distance (m)
+def FinalSpeedFlatFriction(mass, mu, applied_force, d, u = 0, g = 9.8):
+    N    = NormalForce(mass, g)               # Normal force → mg
+    Ff   = FrictionForce(mu, N)               # Kinetic friction → μN
+    a    = (applied_force - Ff) / mass        # Net acceleration → (F − Ff) / m
+    v    = FinalSpeedFromDistance(u, a, d)    # Final speed → sqrt(u² + 2·a·d)
+    return v, a, Ff, N                        # Return full picture
+
+# ============================================================
+# UNIVERSAL GRAVITATION
+# ============================================================
+# Newton's Law of Universal Gravitation: F = G·m1·m2 / r²
+# G = 6.674×10⁻¹¹ N·m²/kg²  (universal gravitational constant)
+# All functions use SI units: kg, metres, Newtons
+
+# Formula: F = G·m1·m2 / r²
+# Returns the gravitational attraction force between two masses
+# m1, m2 = masses in kg
+# r      = distance between centres in metres
+# Returns 0 if r = 0 to avoid division by zero
+# Example: GravitationalForce(1000, 5.97e27, 1e6) → 3.984e8 N
+def GravitationalForce(m1, m2, r, G = 6.674e-11):
+    if r == 0:                    # Guard against division by zero — bodies at same point
+        return 0
+    return G * m1 * m2 / r ** 2  # Newton's law of gravitation → complete F
+
+# Formula: g = G·M / r²
+# Returns gravitational field strength at distance r from a body of mass M
+# Equivalent to the free-fall acceleration an object experiences there
+# M = mass of the large body (kg), r = distance from its centre (m)
+# Example: GravitationalFieldStrength(5.97e24, 6.371e6) → 9.82 m/s²  (surface of Earth)
+def GravitationalFieldStrength(M, r, G = 6.674e-11):
+    if r == 0:                    # Guard against division by zero
+        return 0
+    return G * M / r ** 2         # g = GM/r² → complete field strength
+
+# Formula: r = sqrt(G·M / g)
+# Returns the distance from a body's centre where the field strength equals g
+# Useful for finding orbital altitude given a target acceleration
+# Example: GravitationalFieldRadius(5.97e24, 9.8) → 6.374e6 m  (≈ Earth's radius)
+def GravitationalFieldRadius(M, g_target, G = 6.674e-11):
+    if g_target == 0:             # Guard against division by zero
+        return 0
+    return (G * M / g_target) ** 0.5  # r = sqrt(GM/g) → complete distance
+
+# Formula: v_orb = sqrt(G·M / r)
+# Returns the circular orbital speed at distance r from a body of mass M
+# At this speed centripetal acceleration exactly equals gravitational field strength
+# Example: OrbitalSpeed(5.97e24, 6.771e6) → 7672 m/s  (ISS low orbit)
+def OrbitalSpeed(M, r, G = 6.674e-11):
+    if r == 0:                    # Guard against division by zero
+        return 0
+    return (G * M / r) ** 0.5    # v = sqrt(GM/r) → complete orbital speed
+
+# Formula: T = 2π·r / v_orb = 2π·sqrt(r³ / (G·M))
+# Returns the orbital period — time for one full orbit at radius r
+# Example: OrbitalPeriod(5.97e24, 6.771e6) → 5547 s  (≈ 92 min for ISS)
+def OrbitalPeriod(M, r, G = 6.674e-11):
+    import math
+    if r == 0:                                         # Guard against division by zero
+        return 0
+    return 2 * math.pi * (r ** 3 / (G * M)) ** 0.5   # T = 2π·sqrt(r³/GM) → complete period
+
+# Formula: U = −G·m1·m2 / r
+# Returns the gravitational potential energy of the two-body system
+# Negative because gravity is attractive — zero at infinite separation
+# Example: GravitationalPotentialEnergy(1000, 5.97e24, 6.371e6) → −6.26e10 J
+def GravitationalPotentialEnergy(m1, m2, r, G = 6.674e-11):
+    if r == 0:                       # Guard against division by zero
+        return 0
+    return -(G * m1 * m2) / r        # U = −GMm/r → complete potential energy
+
+# Formula: v_esc = sqrt(2·G·M / r)
+# Returns the escape velocity — minimum speed to leave a body's gravity from distance r
+# Example: EscapeVelocity(5.97e24, 6.371e6) → 11186 m/s  (≈ 11.2 km/s from Earth surface)
+def EscapeVelocity(M, r, G = 6.674e-11):
+    if r == 0:                         # Guard against division by zero
+        return 0
+    return (2 * G * M / r) ** 0.5     # v_esc = sqrt(2GM/r) → complete escape speed
