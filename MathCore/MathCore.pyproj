@@ -22,6 +22,8 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="MathTypes\Advanced\AbstractAlgebra.py" />
+    <Compile Include="MathTypes\Advanced\AlgebraicGeometry.py" />
     <Compile Include="MathTypes\Advanced\Calculus.py">
       <SubType>Code</SubType>
     </Compile>
@@ -29,6 +31,12 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="MathTypes\Advanced\Differential.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="MathTypes\Advanced\DiscreteMath.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="MathTypes\Advanced\LinearAlgebra.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="MathTypes\Advanced\Probability.py">
@@ -62,6 +70,11 @@
     </Compile>
     <Compile Include="MathCore.py" />
     <Compile Include="Config\RNG.py" />
+    <Compile Include="MathTypes\Physics\Physics_Collisions.py" />
+    <Compile Include="MathTypes\Physics\Physics_Energy.py" />
+    <Compile Include="MathTypes\Physics\Physics_Momentum.py" />
+    <Compile Include="MathTypes\Physics\Physics_Springs.py" />
+    <Compile Include="MathTypes\Advanced\Topology.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="MathTypes\Basic\" />

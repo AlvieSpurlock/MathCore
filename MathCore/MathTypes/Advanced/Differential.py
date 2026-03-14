@@ -1,608 +1,512 @@
-﻿import math  # Import math for sqrt, log, exp, sin, cos, tan, pi, factorial
+﻿import math  # sqrt, pi, cos, sin, acos, atan2
+
+# Curves are passed as callables:  curve(t) -> [x, y, z]
+# Surfaces are passed as callables: surface(u, v) -> [x, y, z]
+# Differential forms use callable coefficient functions f(x, y, z) -> float.
+# All numerical derivatives use central differences for O(h²) accuracy.
+# Matrices are lists of lists (row-major); vectors are plain lists.
 
 # ============================================================
-# POLYNOMIAL DIFFERENTIATION — SYMBOLIC
+# INTERNAL HELPERS  (prefixed _ — not part of public API)
 # ============================================================
 
-# Formula: d/dx [c * x^n] = c * n * x^(n-1)
-# Returns the derivative of a single power term as a (coefficient, exponent) tuple
-# The input is a single term described by its coefficient and exponent
-def DiffPowerTerm(coefficient, exponent):
-    new_coefficient = coefficient * exponent                    # Multiply coefficient by exponent → new leading coefficient
-    new_exponent    = exponent - 1                              # Reduce exponent by 1 → complete power rule
-    return (new_coefficient, new_exponent)                      # Return derived term as (coefficient, exponent) tuple
+_H  = 1e-5   # Step size for first/second derivatives
+_H3 = 5e-4   # Larger step for third derivative (reduces cancellation error)
 
-# Formula: d/dx [Σ aₙxⁿ] = Σ n*aₙx^(n-1)
-# Returns the symbolic derivative of a polynomial as a new coefficient list
-# Input coefficients are ordered from highest degree to constant  (e.g. [2, -3, 1] = 2x²-3x+1)
-# Returns [0] for a constant polynomial whose derivative is zero
-def DiffPolynomial(coefficients):
-    degree = len(coefficients) - 1                              # Degree of the polynomial = number of terms minus 1
-    if degree == 0:                                             # Derivative of a constant is zero
-        return [0]                                              # Return [0] — the zero polynomial
-    result = []                                                 # Initialize list to hold derived coefficients
-    for i, coeff in enumerate(coefficients[:-1]):               # Loop through all terms except the constant
-        power       = degree - i                                # Current power of this term = degree minus index
-        new_coeff   = coeff * power                             # Multiply coefficient by its power → power rule
-        result.append(new_coeff)                                # Add the new coefficient to the result
-    return result                                               # Return derived polynomial coefficients — one degree lower
+def _d1(f, t, h=_H):
+    """First derivative of a scalar or vector-valued function (central difference)."""
+    fp = f(t + h); fm = f(t - h)
+    if isinstance(fp, (list, tuple)):
+        return [(fp[i] - fm[i]) / (2.0 * h) for i in range(len(fp))]
+    return (fp - fm) / (2.0 * h)
 
-# Formula: evaluates Σ aₙxⁿ at a given x
-# Returns the value of a polynomial given its coefficient list and an x value
-# Used internally to evaluate both the original and derived polynomials
-def EvalPoly(coefficients, x):
-    degree = len(coefficients) - 1                              # Starting degree = highest index
-    result = 0                                                  # Initialize accumulator
-    for i, coeff in enumerate(coefficients):                    # Loop through each coefficient
-        power   = degree - i                                    # Power for this term = degree minus position
-        result += coeff * (x ** power)                          # Add coeff * x^power to running total
-    return result                                               # Return evaluated polynomial value
+def _d2(f, t, h=_H):
+    """Second derivative: (f(t+h) - 2f(t) + f(t-h)) / h²."""
+    fp = f(t + h); fc = f(t); fm = f(t - h)
+    if isinstance(fp, (list, tuple)):
+        return [(fp[i] - 2.0*fc[i] + fm[i]) / (h*h) for i in range(len(fp))]
+    return (fp - 2.0*fc + fm) / (h*h)
 
-# Formula: derivative of polynomial evaluated at x
-# Returns the numerical value of the derivative of a polynomial at a given x
-# Differentiates symbolically then evaluates at x — exact for polynomials
-def DiffPolynomialAt(coefficients, x):
-    derived = DiffPolynomial(coefficients)                      # Differentiate symbolically → get derived coefficients
-    return EvalPoly(derived, x)                                 # Evaluate the derived polynomial at x → complete d/dx p(x) at x
+def _d3(f, t, h=_H3):
+    """Third derivative: (f(t+2h) - 2f(t+h) + 2f(t-h) - f(t-2h)) / (2h³)."""
+    f2p = f(t + 2.0*h); f1p = f(t + h)
+    f1m = f(t - h);     f2m = f(t - 2.0*h)
+    denom = 2.0 * h**3
+    if isinstance(f2p, (list, tuple)):
+        return [(f2p[i] - 2.0*f1p[i] + 2.0*f1m[i] - f2m[i]) / denom
+                for i in range(len(f2p))]
+    return (f2p - 2.0*f1p + 2.0*f1m - f2m) / denom
 
-# Formula: nth derivative of a polynomial  (apply power rule n times)
-# Returns the coefficient list of the nth derivative of a polynomial
-# Returns [0] once the polynomial has been differentiated to zero
-def DiffPolynomialNth(coefficients, n):
-    result = coefficients[:]                                    # Start with a copy of the original coefficients
-    for _ in range(n):                                          # Apply differentiation n times
-        result = DiffPolynomial(result)                         # Differentiate once per iteration
-        if result == [0]:                                       # Stop early if polynomial collapsed to zero
-            return [0]                                          # All higher derivatives of a constant are zero
-    return result                                               # Return nth derivative coefficient list
+def _norm(v):    return math.sqrt(sum(x*x for x in v))
+def _normalize(v):
+    m = _norm(v)
+    return [x/m for x in v] if m > 1e-14 else [0.0]*len(v)
+def _dot(a,b):   return sum(a[i]*b[i] for i in range(len(a)))
+def _cross(a,b): return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]
+def _add(a,b):   return [a[i]+b[i] for i in range(len(a))]
+def _sub(a,b):   return [a[i]-b[i] for i in range(len(a))]
+def _scale(c,v): return [c*x for x in v]
 
-# Formula: antiderivative — ∫ aₙxⁿ dx = aₙ/(n+1) * x^(n+1) + C
-# Returns the symbolic antiderivative of a polynomial as a new coefficient list
-# The constant of integration C is omitted — represented as trailing 0
-def IntegratePolynomial(coefficients):
-    degree = len(coefficients) - 1                              # Degree of the polynomial
-    result = []                                                 # Initialize list to hold integrated coefficients
-    for i, coeff in enumerate(coefficients):                    # Loop through each term
-        power     = degree - i                                  # Current power of this term
-        new_power = power + 1                                   # After integration the power increases by 1
-        if new_power == 0:                                      # Guard against division by zero — should not occur here
-            result.append(0)                                    # Append 0 safely
-        else:
-            result.append(coeff / new_power)                    # Divide coefficient by new power → integration rule
-    result.append(0)                                            # Append 0 for the constant of integration C
-    return result                                               # Return integrated polynomial coefficients
+def _pu(S,u,v,h=_H):
+    return [(S(u+h,v)[i]-S(u-h,v)[i])/(2.0*h) for i in range(3)]
+def _pv(S,u,v,h=_H):
+    return [(S(u,v+h)[i]-S(u,v-h)[i])/(2.0*h) for i in range(3)]
+def _puu(S,u,v,h=_H):
+    sp=S(u+h,v); sc=S(u,v); sm=S(u-h,v)
+    return [(sp[i]-2.0*sc[i]+sm[i])/(h*h) for i in range(3)]
+def _pvv(S,u,v,h=_H):
+    sp=S(u,v+h); sc=S(u,v); sm=S(u,v-h)
+    return [(sp[i]-2.0*sc[i]+sm[i])/(h*h) for i in range(3)]
+def _puv(S,u,v,h=_H):
+    pp=S(u+h,v+h); pm=S(u+h,v-h); mp=S(u-h,v+h); mm=S(u-h,v-h)
+    return [(pp[i]-pm[i]-mp[i]+mm[i])/(4.0*h*h) for i in range(3)]
 
 # ============================================================
-# DIFFERENTIATION RULES — SYMBOLIC EVALUATION
+# CURVES IN ℝ³
 # ============================================================
 
-# Formula: d/dx [f + g] = f' + g'
-# Returns the derivative of a sum of two functions at x using the sum rule
-# f and g must be callable Python functions
-def SumRule(f, g, x, h = 1e-7):
-    f_prime = (f(x + h) - f(x - h)) / (2 * h)                 # Differentiate f at x → f'(x)
-    g_prime = (g(x + h) - g(x - h)) / (2 * h)                 # Differentiate g at x → g'(x)
-    return f_prime + g_prime                                    # Add derivatives → complete (f+g)' = f' + g'
+# Formula: γ'(t) — velocity vector of a parametric curve at parameter t
+# Returns [dx/dt, dy/dt, dz/dt] via central difference
+def CurveTangentVector(curve, t, h=_H):
+    return _d1(curve, t, h)                                    # Central difference → γ'(t)
 
-# Formula: d/dx [f - g] = f' - g'
-# Returns the derivative of a difference of two functions at x
-def DifferenceRule(f, g, x, h = 1e-7):
-    f_prime = (f(x + h) - f(x - h)) / (2 * h)                 # Differentiate f at x → f'(x)
-    g_prime = (g(x + h) - g(x - h)) / (2 * h)                 # Differentiate g at x → g'(x)
-    return f_prime - g_prime                                    # Subtract derivatives → complete (f-g)' = f' - g'
+# Formula: ‖γ'(t)‖ — speed (magnitude of velocity) at parameter t
+def CurveSpeed(curve, t, h=_H):
+    return _norm(CurveTangentVector(curve, t, h))               # ‖γ'(t)‖ → speed
 
-# Formula: d/dx [c * f] = c * f'
-# Returns the derivative of a constant multiple of a function at x
-def ConstantMultipleRule(c, f, x, h = 1e-7):
-    f_prime = (f(x + h) - f(x - h)) / (2 * h)                 # Differentiate f at x → f'(x)
-    return c * f_prime                                          # Scale by constant → complete (c*f)' = c*f'
+# Formula: T(t) = γ'(t) / ‖γ'(t)‖ — unit tangent vector
+def UnitTangent(curve, t, h=_H):
+    return _normalize(CurveTangentVector(curve, t, h))          # Normalise velocity → T(t)
 
-# Formula: d/dx [f * g] = f'g + fg'
-# Returns the derivative of a product of two functions at x using the product rule
-def ProductRule(f, g, x, h = 1e-7):
-    f_val   = f(x)                                              # Evaluate f at x → f(x)
-    g_val   = g(x)                                              # Evaluate g at x → g(x)
-    f_prime = (f(x + h) - f(x - h)) / (2 * h)                 # Differentiate f → f'(x)
-    g_prime = (g(x + h) - g(x - h)) / (2 * h)                 # Differentiate g → g'(x)
-    return f_prime * g_val + f_val * g_prime                    # Apply product rule → complete f'g + fg'
+# Formula: γ''(t) — acceleration vector at parameter t
+def CurveAcceleration(curve, t, h=_H):
+    return _d2(curve, t, h)                                     # Second derivative → γ''(t)
 
-# Formula: d/dx [f / g] = (f'g - fg') / g²
-# Returns the derivative of a quotient of two functions at x using the quotient rule
-# Returns 0 if g(x) is effectively zero to avoid division by zero
-def QuotientRule(f, g, x, h = 1e-7):
-    f_val   = f(x)                                              # Evaluate f at x
-    g_val   = g(x)                                              # Evaluate g at x
-    if abs(g_val) < 1e-9:                                       # Guard against division by zero
-        return 0                                                # Return 0 safely — quotient undefined here
-    f_prime = (f(x + h) - f(x - h)) / (2 * h)                 # Differentiate f → f'(x)
-    g_prime = (g(x + h) - g(x - h)) / (2 * h)                 # Differentiate g → g'(x)
-    return (f_prime * g_val - f_val * g_prime) / (g_val ** 2)  # Apply quotient rule → complete (f'g - fg') / g²
+# Formula: κ(t) = ‖γ'(t) × γ''(t)‖ / ‖γ'(t)‖³
+# Returns the curvature — how sharply the curve bends; zero for straight lines
+def Curvature(curve, t, h=_H):
+    v   = CurveTangentVector(curve, t, h)
+    a   = CurveAcceleration(curve, t, h)
+    spd = _norm(v)
+    if spd < 1e-14:
+        return 0.0
+    return _norm(_cross(v, a)) / spd**3                        # Complete κ = ‖v×a‖ / ‖v‖³
 
-# Formula: d/dx [f(g(x))] = f'(g(x)) * g'(x)
-# Returns the derivative of a composition of two functions at x using the chain rule
-def ChainRule(f, g, x, h = 1e-7):
-    g_val   = g(x)                                              # Evaluate inner function at x → g(x)
-    f_prime = (f(g_val + h) - f(g_val - h)) / (2 * h)          # Differentiate f at g(x) → f'(g(x))
-    g_prime = (g(x + h) - g(x - h)) / (2 * h)                  # Differentiate g at x → g'(x)
-    return f_prime * g_prime                                    # Multiply → complete f'(g(x)) * g'(x)
+# Formula: ρ(t) = 1 / κ(t) — radius of curvature
+def RadiusOfCurvature(curve, t, h=_H):
+    k = Curvature(curve, t, h)
+    return 1.0/k if k > 1e-14 else float('inf')                # ρ = 1/κ
 
-# Formula: d/dx [f(g(h(x)))] = f'(g(h(x))) * g'(h(x)) * h'(x)
-# Returns the derivative of a triple composition at x using the extended chain rule
-# f, g, inner must all be callable Python functions
-def ChainRuleTriple(f, g, inner, x, h = 1e-7):
-    i_val   = inner(x)                                          # Evaluate innermost function → inner(x)
-    g_val   = g(i_val)                                          # Evaluate middle function at inner(x) → g(inner(x))
-    f_prime = (f(g_val + h) - f(g_val - h)) / (2 * h)          # Differentiate f at g(inner(x)) → f'(...)
-    g_prime = (g(i_val + h) - g(i_val - h)) / (2 * h)          # Differentiate g at inner(x) → g'(inner(x))
-    i_prime = (inner(x + h) - inner(x - h)) / (2 * h)          # Differentiate inner at x → inner'(x)
-    return f_prime * g_prime * i_prime                          # Multiply all three → complete triple chain rule
+# Formula: τ(t) = (γ' × γ'') · γ''' / ‖γ' × γ''‖²
+# Returns the torsion — how much the curve twists out of its osculating plane
+def Torsion(curve, t, h=_H):
+    v     = CurveTangentVector(curve, t, h)
+    a     = CurveAcceleration(curve, t, h)
+    j     = _d3(curve, t)                                      # γ'''(t) via correct 5-point formula
+    vxa   = _cross(v, a)
+    denom = _norm(vxa)**2
+    if denom < 1e-14:
+        return 0.0                                              # Planar curve → zero torsion
+    return _dot(vxa, j) / denom                                # Complete τ = (v×a)·j / ‖v×a‖²
 
-# ============================================================
-# DERIVATIVES OF STANDARD FUNCTIONS — SYMBOLIC
-# ============================================================
+# Formula: L = ∫ₐᵇ ‖γ'(t)‖ dt — arc length via composite Simpson's rule
+def ArcLength(curve, a, b, n=1000):
+    if n % 2: n += 1
+    h = (b-a)/n
+    s = CurveSpeed(curve, a) + CurveSpeed(curve, b)
+    for i in range(1, n):
+        s += (4 if i%2 else 2) * CurveSpeed(curve, a+i*h)
+    return s*h/3.0                                             # Complete Simpson arc length
 
-# Formula: d/dx [x^n] = n * x^(n-1)
-# Returns the derivative of x^n evaluated at x
-# Returns 0 for n = 0 since the derivative of a constant is zero
-def DiffPower(n, x):
-    if n == 0:                                                  # Derivative of x^0 = 1 is zero
-        return 0                                                # Return 0 safely
-    return n * (x ** (n - 1))                                   # Apply power rule → complete n*x^(n-1)
-
-# Formula: d/dx [e^x] = e^x
-# Returns the derivative of e^x at x — it is its own derivative
-def DiffExp(x):
-    return math.exp(x)                                          # e^x is its own derivative → complete d/dx[e^x] = e^x
-
-# Formula: d/dx [a^x] = a^x * ln(a)
-# Returns the derivative of a^x at x
-# Returns 0 if a is non-positive to avoid domain errors in log
-def DiffExpBase(a, x):
-    if a <= 0:                                                  # Guard against log of non-positive base
-        return 0                                                # Return 0 safely — undefined
-    return (a ** x) * math.log(a)                               # Multiply a^x by ln(a) → complete d/dx[a^x] = a^x*ln(a)
-
-# Formula: d/dx [ln(x)] = 1/x
-# Returns the derivative of the natural log at x
-# Returns 0 if x is non-positive to avoid domain errors
-def DiffLn(x):
-    if x <= 0:                                                  # Guard against log of non-positive number
-        return 0                                                # Return 0 safely — ln undefined for x ≤ 0
-    return 1 / x                                                # Reciprocal of x → complete d/dx[ln(x)] = 1/x
-
-# Formula: d/dx [log_a(x)] = 1 / (x * ln(a))
-# Returns the derivative of log base a of x at x
-# Returns 0 if x ≤ 0 or a ≤ 0 or a = 1
-def DiffLog(a, x):
-    if x <= 0 or a <= 0 or a == 1:                             # Guard against domain errors
-        return 0                                                # Return 0 safely
-    return 1 / (x * math.log(a))                                # Apply log derivative formula → complete 1/(x*ln(a))
-
-# Formula: d/dx [sin(x)] = cos(x)
-# Returns the derivative of sin at x in radians
-def DiffSin(x):
-    return math.cos(x)                                          # Derivative of sin is cos → complete d/dx[sin(x)] = cos(x)
-
-# Formula: d/dx [cos(x)] = -sin(x)
-# Returns the derivative of cos at x in radians
-def DiffCos(x):
-    return -math.sin(x)                                         # Derivative of cos is negative sin → complete d/dx[cos(x)] = -sin(x)
-
-# Formula: d/dx [tan(x)] = sec²(x) = 1 / cos²(x)
-# Returns the derivative of tan at x in radians
-# Returns 0 if cos(x) is effectively zero — tan is undefined there
-def DiffTan(x):
-    cos_x = math.cos(x)                                         # Calculate cos(x) first
-    if abs(cos_x) < 1e-9:                                       # Guard against division by zero
-        return 0                                                # Return 0 safely — tan undefined at this x
-    return 1 / (cos_x ** 2)                                     # Reciprocal of cos²(x) → complete d/dx[tan] = sec²(x)
-
-# Formula: d/dx [arcsin(x)] = 1 / sqrt(1 - x²)
-# Returns the derivative of arcsin at x
-# Returns 0 if x is outside (-1, 1) — arcsin undefined at the endpoints
-def DiffArcsin(x):
-    if abs(x) >= 1:                                             # Guard against sqrt of negative or zero
-        return 0                                                # Return 0 safely — derivative undefined at ±1
-    return 1 / math.sqrt(1 - x ** 2)                            # Apply arcsin derivative → complete 1/sqrt(1-x²)
-
-# Formula: d/dx [arccos(x)] = -1 / sqrt(1 - x²)
-# Returns the derivative of arccos at x
-# Returns 0 if x is outside (-1, 1)
-def DiffArccos(x):
-    if abs(x) >= 1:                                             # Guard against sqrt of negative or zero
-        return 0                                                # Return 0 safely
-    return -1 / math.sqrt(1 - x ** 2)                           # Negate arcsin derivative → complete -1/sqrt(1-x²)
-
-# Formula: d/dx [arctan(x)] = 1 / (1 + x²)
-# Returns the derivative of arctan at x — defined for all real x
-def DiffArctan(x):
-    return 1 / (1 + x ** 2)                                     # Reciprocal of (1+x²) → complete d/dx[arctan(x)]
-
-# Formula: d/dx [sinh(x)] = cosh(x)
-# Returns the derivative of the hyperbolic sine at x
-def DiffSinh(x):
-    return math.cosh(x)                                         # Derivative of sinh is cosh → complete d/dx[sinh(x)] = cosh(x)
-
-# Formula: d/dx [cosh(x)] = sinh(x)
-# Returns the derivative of the hyperbolic cosine at x
-def DiffCosh(x):
-    return math.sinh(x)                                         # Derivative of cosh is sinh → complete d/dx[cosh(x)] = sinh(x)
-
-# Formula: d/dx [tanh(x)] = sech²(x) = 1 - tanh²(x)
-# Returns the derivative of the hyperbolic tangent at x
-def DiffTanh(x):
-    return 1 - math.tanh(x) ** 2                                # Apply tanh derivative identity → complete 1 - tanh²(x)
+# Returns (t_vals, s_vals) lookup tables for arc-length reparametrization
+def ArcLengthTable(curve, a, b, n=500):
+    h = (b-a)/n
+    s_vals = [0.0]
+    for i in range(1, n+1):
+        t0=a+(i-1)*h; t1=a+i*h; tm=(t0+t1)/2.0
+        s_vals.append(s_vals[-1] + (CurveSpeed(curve,t0)+4.0*CurveSpeed(curve,tm)+CurveSpeed(curve,t1))*h/6.0)
+    return [a+i*h for i in range(n+1)], s_vals                # (t_vals, s_vals)
 
 # ============================================================
-# IMPLICIT DIFFERENTIATION
+# FRENET-SERRET FRAME
 # ============================================================
 
-# Formula: dy/dx = -Fx / Fy  where Fx = ∂F/∂x  and  Fy = ∂F/∂y
-# Returns dy/dx for an implicit equation F(x, y) = 0 at a given point (x, y)
-# F must be a callable accepting two arguments (x, y)
-# Returns 0 if Fy is effectively zero — vertical tangent at this point
-def ImplicitDerivative(F, x, y, h = 1e-7):
-    Fx = (F(x + h, y) - F(x - h, y)) / (2 * h)                # Partial derivative of F with respect to x → ∂F/∂x
-    Fy = (F(x, y + h) - F(x, y - h)) / (2 * h)                # Partial derivative of F with respect to y → ∂F/∂y
-    if abs(Fy) < 1e-9:                                          # Guard against division by zero — vertical tangent
-        return 0                                                # Return 0 safely
-    return -Fx / Fy                                             # Apply implicit differentiation formula → complete dy/dx = -Fx/Fy
+# Formula: T = γ'/‖γ'‖,  N = T'/‖T'‖,  B = T × N
+# Returns (T, N, B) — the orthonormal Frenet-Serret frame at parameter t
+def FrenetSerretFrame(curve, t, h=_H):
+    T  = UnitTangent(curve, t, h)
+    dT = _d1(lambda s: UnitTangent(curve, s, h), t, h)         # Rate of change of unit tangent
+    N  = _normalize(dT)                                        # Principal normal
+    B  = _cross(T, N)                                          # Binormal B = T × N
+    return T, N, B                                             # Complete Frenet-Serret triad (T, N, B)
 
-# Formula: d²y/dx² using implicit differentiation applied twice
-# Returns the second implicit derivative at (x, y)
-# Uses the first implicit derivative as a callable and differentiates it again numerically
-def ImplicitSecondDerivative(F, x, y, h = 1e-5):
-    def dydx(xi, yi):                                           # Define dy/dx as a function of (x, y)
-        return ImplicitDerivative(F, xi, yi, h)                 # Compute dy/dx at any point
-    Fx  = (F(x + h, y) - F(x - h, y)) / (2 * h)               # ∂F/∂x at (x, y)
-    Fy  = (F(x, y + h) - F(x, y - h)) / (2 * h)               # ∂F/∂y at (x, y)
-    if abs(Fy) < 1e-9:                                          # Guard against division by zero
-        return 0                                                # Return 0 safely
-    dydx_val = -Fx / Fy                                         # First implicit derivative at (x, y)
-    # Estimate d²y/dx² by perturbing x and recomputing dy/dx while updating y via Euler step
-    y_plus  = y + dydx_val * h                                  # Approximate y at x+h using first derivative
-    y_minus = y - dydx_val * h                                  # Approximate y at x-h using first derivative
-    dydx_plus  = dydx(x + h, y_plus)                            # dy/dx at (x+h, y_plus)
-    dydx_minus = dydx(x - h, y_minus)                           # dy/dx at (x-h, y_minus)
-    return (dydx_plus - dydx_minus) / (2 * h)                   # Central difference of first derivative → complete d²y/dx²
+# Returns (κ, τ) — curvature and torsion confirming the Frenet-Serret equations
+def FrenetSerretCurvatureTorsion(curve, t, h=_H):
+    return Curvature(curve, t, h), Torsion(curve, t, h)
 
-# Formula: tangent slope at a point on an implicit curve = ImplicitDerivative
-# Returns the equation of the tangent line to F(x,y)=0 at (x0, y0) as a callable
-def ImplicitTangentLine(F, x0, y0, h = 1e-7):
-    slope = ImplicitDerivative(F, x0, y0, h)                    # Get slope of tangent → dy/dx at (x0, y0)
-    b     = y0 - slope * x0                                     # Compute y-intercept → b = y0 - slope*x0
-    return lambda x: slope * x + b                              # Return tangent line as callable → y = slope*x + b
+# Formula: osculating plane normal = B; plane passes through γ(t)
+def OsculatingPlane(curve, t, h=_H):
+    T, N, B = FrenetSerretFrame(curve, t, h)
+    return B, curve(t)                                         # (normal, base point)
 
-# ============================================================
-# LOGARITHMIC DIFFERENTIATION
-# ============================================================
+# Formula: osculating circle — center = γ(t) + ρN, radius = 1/κ
+def OsculatingCircle(curve, t, h=_H):
+    _, N, _ = FrenetSerretFrame(curve, t, h)
+    kappa   = Curvature(curve, t, h)
+    if kappa < 1e-14:
+        return None, float('inf')
+    rho = 1.0/kappa
+    return _add(curve(t), _scale(rho, N)), rho                 # (center, radius)
 
-# Formula: d/dx [f^g] = f^g * (g' * ln(f) + g * f'/f)
-# Returns the derivative of f(x)^g(x) at x using logarithmic differentiation
-# f and g must be callable Python functions  — f(x) must be positive at x
-# Returns 0 if f(x) is non-positive to avoid domain errors in log
-def LogDiff(f, g, x, h = 1e-7):
-    f_val   = f(x)                                              # Evaluate f at x
-    g_val   = g(x)                                              # Evaluate g at x
-    if f_val <= 0:                                              # Guard against log of non-positive value
-        return 0                                                # Return 0 safely — logarithmic diff undefined here
-    f_prime = (f(x + h) - f(x - h)) / (2 * h)                  # Differentiate f → f'(x)
-    g_prime = (g(x + h) - g(x - h)) / (2 * h)                  # Differentiate g → g'(x)
-    log_deriv = g_prime * math.log(f_val) + g_val * (f_prime / f_val)  # d/dx[ln(f^g)] = g'*ln(f) + g*f'/f
-    return (f_val ** g_val) * log_deriv                         # Multiply f^g by log derivative → complete d/dx[f^g]
-
-# Formula: d/dx [product of n functions] using logarithmic differentiation
-# Returns the derivative of the product f1*f2*...*fn at x
-# All functions must be callable and positive at x
-# Returns 0 if any function evaluates to zero or negative at x
-def LogDiffProduct(functions, x, h = 1e-7):
-    values  = [f(x) for f in functions]                         # Evaluate all functions at x
-    if any(v <= 0 for v in values):                             # Guard — all values must be positive for log
-        return 0                                                # Return 0 safely
-    product = 1                                                 # Initialize product accumulator
-    for v in values:                                            # Multiply all function values together
-        product *= v                                            # Build the product f1*f2*...*fn
-    log_sum = 0                                                 # Initialize sum of logarithmic derivative terms
-    for i, f in enumerate(functions):                           # Loop through each function
-        f_prime  = (f(x + h) - f(x - h)) / (2 * h)            # Differentiate this function → f_i'(x)
-        log_sum += f_prime / values[i]                          # Add f_i'/f_i to the log derivative sum
-    return product * log_sum                                    # Multiply product by sum → complete log diff of product
+# Formula: ∫κ ds and ∫τ ds over [a,b] — total curvature and total torsion
+def TotalCurvatureAndTorsion(curve, a, b, n=500):
+    h = (b-a)/n; tk = tt = 0.0
+    for i in range(n):
+        ti  = a+(i+0.5)*h; sp = CurveSpeed(curve, ti)
+        tk += Curvature(curve, ti)*sp*h
+        tt += Torsion(curve, ti)*sp*h
+    return tk, tt                                              # (∫κ ds, ∫τ ds)
 
 # ============================================================
-# L'HÔPITAL'S RULE
+# PARAMETRIC SURFACES
 # ============================================================
 
-# Formula: lim f/g as x→a = lim f'/g' as x→a  (when f and g both → 0 or both → ±∞)
-# Returns the limit of f(x)/g(x) as x approaches a using L'Hôpital's rule
-# Applies the rule up to max_iterations times — returns 0 if it never resolves
-# f and g must be callable Python functions
-def LHopital(f, g, a, max_iterations = 5, h = 1e-7, tolerance = 1e-9):
-    for _ in range(max_iterations):                             # Apply the rule up to max_iterations times
-        f_val = f(a)                                            # Evaluate f at the limit point
-        g_val = g(a)                                            # Evaluate g at the limit point
-        if abs(g_val) > tolerance:                              # If denominator is nonzero we can evaluate directly
-            return f_val / g_val                                # Limit exists as a simple ratio → return f/g
-        f_prime = lambda x: (f(x + h) - f(x - h)) / (2 * h)   # Define f' as central difference
-        g_prime = lambda x: (g(x + h) - g(x - h)) / (2 * h)   # Define g' as central difference
-        f = f_prime                                             # Replace f with f' for the next iteration
-        g = g_prime                                             # Replace g with g' for the next iteration
-    f_val = f(a)                                                # Final attempt after all iterations
-    g_val = g(a)                                                # Final denominator check
-    if abs(g_val) < tolerance:                                  # Still indeterminate after max iterations
-        return 0                                                # Return 0 safely — limit could not be resolved
-    return f_val / g_val                                        # Return best available ratio
+# Formula: rᵤ = ∂r/∂u, rᵥ = ∂r/∂v — tangent vectors spanning the tangent plane
+def SurfaceTangentVectors(surface, u, v, h=_H):
+    return _pu(surface,u,v,h), _pv(surface,u,v,h)              # (r_u, r_v)
 
-# Formula: checks if a limit is 0/0 or ∞/∞ indeterminate form
-# Returns True if f(a)/g(a) is an indeterminate form at x = a
-def IsIndeterminate(f, g, a, tolerance = 1e-6):
-    try:
-        f_val = abs(f(a))                                       # Evaluate |f(a)|
-        g_val = abs(g(a))                                       # Evaluate |g(a)|
-        both_zero = f_val < tolerance and g_val < tolerance     # Check 0/0 form
-        both_inf  = f_val > 1e10 and g_val > 1e10              # Check ∞/∞ form
-        return both_zero or both_inf                            # Indeterminate if either condition holds
-    except:
-        return False                                            # Return False safely if evaluation fails
+# Formula: N = rᵤ × rᵥ — surface normal (unnormalised; ‖N‖ = area element)
+def SurfaceNormal(surface, u, v, h=_H):
+    ru,rv = SurfaceTangentVectors(surface,u,v,h)
+    return _cross(ru, rv)                                      # N = rᵤ × rᵥ
+
+# Formula: n̂ = N / ‖N‖ — unit normal
+def UnitNormal(surface, u, v, h=_H):
+    return _normalize(SurfaceNormal(surface,u,v,h))
+
+# Formula: dA = ‖rᵤ × rᵥ‖ du dv — area element magnitude
+def AreaElement(surface, u, v, h=_H):
+    return _norm(SurfaceNormal(surface,u,v,h))
+
+# Formula: ∫∫ ‖rᵤ × rᵥ‖ du dv — surface area via midpoint rule on n×n grid
+def SurfaceArea(surface, u0, u1, v0, v1, n=50):
+    du=(u1-u0)/n; dv=(v1-v0)/n; total=0.0
+    for i in range(n):
+        for j in range(n):
+            total += AreaElement(surface, u0+(i+0.5)*du, v0+(j+0.5)*dv)*du*dv
+    return total
 
 # ============================================================
-# NEWTON'S METHOD
+# FIRST FUNDAMENTAL FORM
 # ============================================================
 
-# Formula: xₙ₊₁ = xₙ - f(xₙ) / f'(xₙ)
-# Returns an approximation of a root of f near x0 using Newton's method
-# Iterates up to max_iterations times — stops early if convergence is reached
-# Returns x0 unchanged if f'(x) is effectively zero at any step
-def NewtonsMethod(f, x0, max_iterations = 100, tolerance = 1e-10, h = 1e-7):
-    x = x0                                                      # Start at the initial guess
-    for _ in range(max_iterations):                             # Iterate up to max_iterations times
-        f_val   = f(x)                                          # Evaluate f at current x
-        f_prime = (f(x + h) - f(x - h)) / (2 * h)             # Differentiate f at current x → f'(x)
-        if abs(f_prime) < 1e-12:                                # Guard against division by zero — flat tangent
-            return x                                            # Return current best guess if derivative is zero
-        x_new = x - f_val / f_prime                             # Apply Newton's formula → xₙ₊₁ = xₙ - f/f'
-        if abs(x_new - x) < tolerance:                          # Check convergence — stop if change is tiny
-            return x_new                                        # Return converged root
-        x = x_new                                               # Update x for next iteration
-    return x                                                    # Return best approximation after all iterations
+# Formula: E = rᵤ·rᵤ, F = rᵤ·rᵥ, G = rᵥ·rᵥ
+# I = E du² + 2F du dv + G dv² — measures lengths and angles intrinsically
+def FirstFundamentalForm(surface, u, v, h=_H):
+    ru,rv = SurfaceTangentVectors(surface,u,v,h)
+    return _dot(ru,ru), _dot(ru,rv), _dot(rv,rv)               # (E, F, G)
 
-# Formula: finds multiple roots by applying Newton's method from multiple starting points
-# Returns a list of unique approximate roots of f found by sampling starting points across [a, b]
-# Deduplicates roots within the given tolerance
-def FindRoots(f, a, b, num_starts = 50, tolerance = 1e-6, h = 1e-7):
-    roots   = []                                                # Initialize empty list of found roots
-    step    = (b - a) / num_starts                              # Evenly space starting points across [a, b]
-    for i in range(num_starts):                                 # Loop through each starting point
-        x0   = a + i * step                                     # Calculate this starting position
-        root = NewtonsMethod(f, x0, tolerance = tolerance, h = h)  # Apply Newton's method from this start
-        if a <= root <= b:                                      # Only keep roots inside the search interval
-            duplicate = any(abs(root - r) < tolerance for r in roots)  # Check if this root is already found
-            if not duplicate:                                   # Only add genuinely new roots
-                roots.append(root)                              # Add unique root to the list
-    roots.sort()                                                # Sort roots in ascending order
-    return roots                                                # Return list of unique roots
+# Returns the 2×2 metric tensor [[E,F],[F,G]]
+def MetricTensor(surface, u, v, h=_H):
+    E,F,G = FirstFundamentalForm(surface,u,v,h)
+    return [[E,F],[F,G]]
 
-# Formula: order of convergence of Newton's method ≈ 2 for simple roots
-# Returns the number of iterations Newton's method needed to converge to a root near x0
-# Returns -1 if Newton's method did not converge within max_iterations
-def NewtonsConvergenceCount(f, x0, max_iterations = 100, tolerance = 1e-10, h = 1e-7):
-    x = x0                                                      # Start at initial guess
-    for i in range(max_iterations):                             # Count iterations
-        f_val   = f(x)                                          # Evaluate f
-        f_prime = (f(x + h) - f(x - h)) / (2 * h)             # Differentiate f
-        if abs(f_prime) < 1e-12:                                # Guard against flat tangent
-            return -1                                           # Did not converge — return -1
-        x_new = x - f_val / f_prime                             # Newton step
-        if abs(x_new - x) < tolerance:                          # Converged
-            return i + 1                                        # Return iteration count (1-indexed)
-        x = x_new
-    return -1                                                   # Did not converge within limit → return -1
+# Formula: ds² = E du² + 2F du dv + G dv² — squared arc-length in direction (du,dv)
+def ArcLengthElement(surface, u, v, du, dv, h=_H):
+    E,F,G = FirstFundamentalForm(surface,u,v,h)
+    return E*du*du + 2.0*F*du*dv + G*dv*dv
+
+# Formula: θ = arccos(F / √(EG)) — angle between coordinate curves at (u,v)
+def AngleBetweenCoordinateCurves(surface, u, v, h=_H):
+    E,F,G = FirstFundamentalForm(surface,u,v,h)
+    d = math.sqrt(E*G)
+    if d < 1e-14: return 0.0
+    return math.degrees(math.acos(max(-1.0, min(1.0, F/d))))   # Complete θ = arccos(F/√EG)
+
+# Formula: √(EG − F²) — area-scaling factor (square root of metric determinant)
+def MetricDeterminant(surface, u, v, h=_H):
+    E,F,G = FirstFundamentalForm(surface,u,v,h)
+    return math.sqrt(max(0.0, E*G - F*F))
 
 # ============================================================
-# RELATED RATES
+# SECOND FUNDAMENTAL FORM
 # ============================================================
 
-# Formula: dy/dt = (dy/dx) * (dx/dt)  via chain rule
-# Returns dy/dt given the derivative dy/dx at x and the rate dx/dt
-# This is the standard related rates setup — how fast y changes given how fast x changes
-def RelatedRate(dydx, dxdt):
-    return dydx * dxdt                                          # Multiply derivatives → complete dy/dt = (dy/dx)*(dx/dt)
+# Formula: L = rᵤᵤ·n̂,  M = rᵤᵥ·n̂,  N = rᵥᵥ·n̂
+# II = L du² + 2M du dv + N dv² — encodes extrinsic curvature
+def SecondFundamentalForm(surface, u, v, h=_H):
+    n_hat = UnitNormal(surface,u,v,h)
+    L = _dot(_puu(surface,u,v,h), n_hat)
+    M = _dot(_puv(surface,u,v,h), n_hat)
+    N = _dot(_pvv(surface,u,v,h), n_hat)
+    return L, M, N                                             # Complete (L, M, N)
 
-# Formula: dA/dt = 2πr * (dr/dt)  for a circle with changing radius
-# Returns the rate of change of a circle's area given the rate of change of its radius
-def CircleAreaRate(r, drdt):
-    return 2 * math.pi * r * drdt                               # Multiply 2πr by dr/dt → complete dA/dt = 2πr*(dr/dt)
-
-# Formula: dV/dt = 4πr² * (dr/dt)  for a sphere with changing radius
-# Returns the rate of change of a sphere's volume given the rate of change of its radius
-def SphereVolumeRate(r, drdt):
-    return 4 * math.pi * r ** 2 * drdt                          # Multiply 4πr² by dr/dt → complete dV/dt = 4πr²*(dr/dt)
-
-# Formula: dV/dt = πr² * (dh/dt)  for a cylinder with fixed radius and changing height
-# Returns the rate of change of a cylinder's volume given the rate of change of its height
-def CylinderVolumeRate(r, dhdt):
-    return math.pi * r ** 2 * dhdt                              # Multiply πr² by dh/dt → complete dV/dt = πr²*(dh/dt)
-
-# Formula: dz/dt via Pythagorean related rate — z² = x² + y²
-# Returns dz/dt given x, y, dx/dt, and dy/dt for two legs of a right triangle
-# Returns 0 if z is effectively zero to avoid division by zero
-def PythagoreanRate(x, y, dxdt, dydt):
-    z = math.sqrt(x ** 2 + y ** 2)                              # Calculate hypotenuse → z = sqrt(x²+y²)
-    if z < 1e-9:                                                # Guard against division by zero
-        return 0                                                # Return 0 safely
-    return (x * dxdt + y * dydt) / z                            # Apply related rate formula → complete dz/dt = (x*dx/dt + y*dy/dt)/z
-
-# Formula: shadow rate — ds/dt using similar triangles
-# Returns the rate at which a shadow length changes given a person walking away from a light
-# person_height = height of the person, light_height = height of the light source
-# x = distance from light to person, dxdt = walking speed
-# Returns 0 if (light_height - person_height) is zero to avoid division by zero
-def ShadowLengthRate(person_height, light_height, x, dxdt):
-    denominator = light_height - person_height                  # Difference in heights — determines shadow ratio
-    if abs(denominator) < 1e-9:                                 # Guard against division by zero
-        return 0                                                # Return 0 safely — no shadow differential
-    ratio = person_height / denominator                         # Similar triangles ratio
-    return ratio * dxdt                                         # Scale by walking rate → complete ds/dt
+# Formula: κₙ = II / I = (L du² + 2M du dv + N dv²) / (E du² + 2F du dv + G dv²)
+def NormalCurvature(surface, u, v, du, dv, h=_H):
+    L,M,N = SecondFundamentalForm(surface,u,v,h)
+    num   = L*du*du + 2.0*M*du*dv + N*dv*dv
+    den   = ArcLengthElement(surface,u,v,du,dv,h)
+    return num/den if abs(den) > 1e-14 else 0.0                # Complete κₙ = II/I
 
 # ============================================================
-# LINEARIZATION AND DIFFERENTIALS
+# SURFACE CURVATURE
 # ============================================================
 
-# Formula: L(x) = f(a) + f'(a) * (x - a)
-# Returns the linear approximation (tangent line) of f at a evaluated at x
-# This is the best linear estimate of f near the point a
-def Linearization(f, a, x, h = 1e-7):
-    f_a     = f(a)                                              # Evaluate f at center point a → f(a)
-    f_prime = (f(a + h) - f(a - h)) / (2 * h)                  # Differentiate f at a → f'(a)
-    return f_a + f_prime * (x - a)                              # Apply linearization formula → complete L(x) = f(a) + f'(a)*(x-a)
+# Formula: shape operator S = I⁻¹ · II — 2×2 Weingarten map (eigenvalues = principal curvatures)
+def ShapeOperator(surface, u, v, h=_H):
+    E,F,G = FirstFundamentalForm(surface,u,v,h)
+    L,M,N = SecondFundamentalForm(surface,u,v,h)
+    det_I = E*G - F*F
+    if abs(det_I) < 1e-14: return [[0.0,0.0],[0.0,0.0]]
+    return [[(G*L-F*M)/det_I, (G*M-F*N)/det_I],
+            [(E*M-F*L)/det_I, (E*N-F*M)/det_I]]               # Complete shape operator
 
-# Formula: dy = f'(x) * dx
-# Returns the differential dy — the approximate change in f for a small change dx in x
-def Differential(f, x, dx, h = 1e-7):
-    f_prime = (f(x + h) - f(x - h)) / (2 * h)                  # Differentiate f at x → f'(x)
-    return f_prime * dx                                         # Multiply by dx → complete dy = f'(x)*dx
+# Formula: K = (LN − M²) / (EG − F²) — Gaussian curvature (Theorema Egregium)
+# K > 0 elliptic, K < 0 hyperbolic, K = 0 parabolic/flat
+def GaussianCurvature(surface, u, v, h=_H):
+    E,F,G = FirstFundamentalForm(surface,u,v,h)
+    L,M,N = SecondFundamentalForm(surface,u,v,h)
+    det_I = E*G - F*F
+    return (L*N - M*M)/det_I if abs(det_I) > 1e-14 else 0.0   # Complete K
 
-# Formula: relative error ≈ |dy/y|  where dy = f'(x)*dx
-# Returns the relative error in f(x) given an absolute error dx in x
-# Returns 0 if f(x) is effectively zero to avoid division by zero
-def RelativeError(f, x, dx, h = 1e-7):
-    f_val = f(x)                                                # Evaluate f at x → f(x)
-    if abs(f_val) < 1e-12:                                      # Guard against division by zero
-        return 0                                                # Return 0 safely
-    dy = Differential(f, x, dx, h)                              # Calculate differential → dy = f'(x)*dx
-    return abs(dy / f_val)                                      # Divide by f(x) → complete relative error = |dy/y|
+# Formula: H = (EN − 2FM + GL) / (2(EG − F²)) — mean curvature
+# H = 0 for minimal surfaces; |H| = 1/r for a sphere of radius r
+def MeanCurvature(surface, u, v, h=_H):
+    E,F,G = FirstFundamentalForm(surface,u,v,h)
+    L,M,N = SecondFundamentalForm(surface,u,v,h)
+    det_I = E*G - F*F
+    return (E*N - 2.0*F*M + G*L)/(2.0*det_I) if abs(det_I) > 1e-14 else 0.0
 
-# Formula: percentage error ≈ |dy/y| * 100
-# Returns the percentage error in f(x) given an absolute measurement error dx
-def PercentageError(f, x, dx, h = 1e-7):
-    return RelativeError(f, x, dx, h) * 100                     # Scale relative error by 100 → complete percentage error
+# Formula: κ₁ = H + √(H²−K), κ₂ = H − √(H²−K) — principal curvatures
+# Returns (kappa1, kappa2) with kappa1 ≥ kappa2
+def PrincipalCurvatures(surface, u, v, h=_H):
+    K=GaussianCurvature(surface,u,v,h); H=MeanCurvature(surface,u,v,h)
+    sq = math.sqrt(max(0.0, H*H - K))
+    return H+sq, H-sq                                         # κ₁ ≥ κ₂
 
-# ============================================================
-# HIGHER ORDER AND SPECIAL DERIVATIVES
-# ============================================================
+# Returns 'elliptic', 'hyperbolic', 'parabolic', or 'flat' at the surface point
+def ClassifySurfacePoint(surface, u, v, h=_H, tol=1e-6):
+    K=GaussianCurvature(surface,u,v,h); H=MeanCurvature(surface,u,v,h)
+    if   K >  tol: return 'elliptic'
+    elif K < -tol: return 'hyperbolic'
+    elif abs(H) > tol: return 'parabolic'
+    else: return 'flat (planar)'
 
-# Formula: f^(n)(x) via repeated central difference
-# Returns the nth numerical derivative of f at x
-# Recursively wraps the central difference — each layer adds one derivative
-def NthDerivative(f, x, n, h = 1e-5):
-    if n == 0:                                                  # Base case — zeroth derivative is the function itself
-        return f(x)                                             # Return f(x) directly
-    if n == 1:                                                  # First derivative uses central difference directly
-        return (f(x + h) - f(x - h)) / (2 * h)                 # Central difference → f'(x)
-    inner = lambda t: NthDerivative(f, t, n - 1, h)             # Wrap (n-1)th derivative as a new callable
-    return (inner(x + h) - inner(x - h)) / (2 * h)             # Differentiate the wrapper → complete f^(n)(x)
-
-# Formula: mixed partial ∂²f / ∂x∂y ≈ [f(x+h,y+h) - f(x+h,y-h) - f(x-h,y+h) + f(x-h,y-h)] / 4h²
-# Returns the mixed second partial derivative of f at (x, y)
-# f must accept two arguments (x, y)
-def MixedPartial(f, x, y, h = 1e-5):
-    try:
-        return (f(x+h, y+h) - f(x+h, y-h) - f(x-h, y+h) + f(x-h, y-h)) / (4 * h ** 2)  # Four-point mixed partial formula
-    except:
-        return 0                                                # Return 0 safely if f is undefined nearby
-
-# Formula: Jacobian matrix of a vector function F: Rⁿ → Rᵐ evaluated at a point
-# Returns the Jacobian as a 2D list — rows are output components, columns are input variables
-# F must be a list of callables each accepting a list of values
-# point must be a list of coordinate values
-def Jacobian(F, point, h = 1e-7):
-    m      = len(F)                                             # Number of output components
-    n      = len(point)                                         # Number of input variables
-    J      = [[0.0] * n for _ in range(m)]                     # Initialize m×n Jacobian matrix with zeros
-    for i in range(m):                                          # Loop through each output component
-        for j in range(n):                                      # Loop through each input variable
-            point_plus  = point[:]                              # Copy point for forward perturbation
-            point_minus = point[:]                              # Copy point for backward perturbation
-            point_plus[j]  += h                                 # Perturb jth variable forward
-            point_minus[j] -= h                                 # Perturb jth variable backward
-            J[i][j] = (F[i](point_plus) - F[i](point_minus)) / (2 * h)  # Central difference → ∂Fᵢ/∂xⱼ
-    return J                                                    # Return completed Jacobian matrix
-
-# Formula: Hessian matrix — Hᵢⱼ = ∂²f / ∂xᵢ∂xⱼ
-# Returns the Hessian matrix of a scalar function f at a given point as a 2D list
-# f must accept a list of coordinate values — point must be a list
-def Hessian(f, point, h = 1e-5):
-    n = len(point)                                              # Number of variables
-    H = [[0.0] * n for _ in range(n)]                          # Initialize n×n Hessian matrix with zeros
-    for i in range(n):                                          # Loop through rows
-        for j in range(n):                                      # Loop through columns
-            if i == j:                                          # Diagonal — pure second partial ∂²f/∂xᵢ²
-                p_plus  = point[:]
-                p_minus = point[:]
-                p_plus[i]  += h
-                p_minus[i] -= h
-                H[i][j] = (f(p_plus) - 2*f(point) + f(p_minus)) / (h ** 2)  # Second difference formula
-            else:                                               # Off-diagonal — mixed partial ∂²f/∂xᵢ∂xⱼ
-                pp = point[:]
-                pm = point[:]
-                mp = point[:]
-                mm = point[:]
-                pp[i] += h;  pp[j] += h                        # Both forward
-                pm[i] += h;  pm[j] -= h                        # i forward, j backward
-                mp[i] -= h;  mp[j] += h                        # i backward, j forward
-                mm[i] -= h;  mm[j] -= h                        # Both backward
-                H[i][j] = (f(pp) - f(pm) - f(mp) + f(mm)) / (4 * h ** 2)  # Four-point mixed partial
-    return H                                                    # Return completed Hessian matrix
+# Formula: ∫∫ K dA — total Gaussian curvature over parameter rectangle [u0,u1]×[v0,v1]
+def TotalGaussianCurvature(surface, u0, u1, v0, v1, n=40):
+    du=(u1-u0)/n; dv=(v1-v0)/n; total=0.0
+    for i in range(n):
+        for j in range(n):
+            u=u0+(i+0.5)*du; v=v0+(j+0.5)*dv
+            total += GaussianCurvature(surface,u,v)*MetricDeterminant(surface,u,v)*du*dv
+    return total                                               # Complete ∫∫ K dA
 
 # ============================================================
-# CURVE SKETCHING UTILITIES
+# CHRISTOFFEL SYMBOLS
 # ============================================================
 
-# Formula: scan [a, b] for sign changes in f'(x) to locate critical points
-# Returns a list of approximate critical points of f in the interval [a, b]
-# A critical point is where f'(x) ≈ 0 — located by sign change detection
-def FindCriticalPoints(f, a, b, steps = 1000, h = 1e-7):
-    critical = []                                               # Initialize list of found critical points
-    dx       = (b - a) / steps                                  # Step size across the interval
-    prev_d   = None                                             # Previous derivative value for sign change detection
-    for i in range(steps + 1):                                  # Loop through all sample points
-        xi = a + i * dx                                         # Current x value
-        try:
-            di = (f(xi + h) - f(xi - h)) / (2 * h)             # Derivative at xi
-        except:
-            prev_d = None                                       # Reset if function undefined here
-            continue
-        if prev_d is not None and prev_d * di < 0:             # Sign change detected → critical point between xi-dx and xi
-            mid = xi - dx / 2                                   # Approximate critical point as midpoint
-            refined = NewtonsMethod(lambda x: (f(x+h)-f(x-h))/(2*h), mid, h=h)  # Refine with Newton's on f'
-            if a <= refined <= b:                               # Keep only points inside the interval
-                duplicate = any(abs(refined - c) < 1e-6 for c in critical)
-                if not duplicate:
-                    critical.append(refined)                    # Add unique critical point
-        prev_d = di                                             # Update previous derivative
-    critical.sort()                                             # Sort in ascending order
-    return critical                                             # Return all found critical points
+# Formula: Γᵏᵢⱼ = ½ gᵏˡ (∂ⱼgᵢˡ + ∂ᵢgⱼˡ − ∂ˡgᵢⱼ) — Christoffel symbols of the second kind
+# Indices: 0 ↔ u, 1 ↔ v. Returns Γ[k][i][j] — a 2×2×2 array at (u,v)
+def ChristoffelSymbols(surface, u, v, h=_H):
+    def g_at(uu,vv):
+        E,F,G=FirstFundamentalForm(surface,uu,vv,h); return [[E,F],[F,G]]
+    g0=g_at(u,v); gup=g_at(u+h,v); gum=g_at(u-h,v); gvp=g_at(u,v+h); gvm=g_at(u,v-h)
+    dg = [
+        [[(gup[i][j]-gum[i][j])/(2.0*h) for j in range(2)] for i in range(2)],
+        [[(gvp[i][j]-gvm[i][j])/(2.0*h) for j in range(2)] for i in range(2)],
+    ]
+    E0,F0,G0=g0[0][0],g0[0][1],g0[1][1]; det=E0*G0-F0*F0
+    if abs(det)<1e-14: return [[[0.0]*2 for _ in range(2)] for _ in range(2)]
+    gi=[[G0/det,-F0/det],[-F0/det,E0/det]]
+    G3=[[[0.0]*2 for _ in range(2)] for _ in range(2)]
+    for k in range(2):
+        for i in range(2):
+            for j in range(2):
+                G3[k][i][j]=0.5*sum(gi[k][l]*(dg[j][i][l]+dg[i][j][l]-dg[l][i][j])
+                                    for l in range(2))        # Complete Γᵏᵢⱼ
+    return G3
 
-# Formula: scan [a, b] for sign changes in f''(x) to locate inflection points
-# Returns a list of approximate inflection points of f in the interval [a, b]
-def FindInflectionPoints(f, a, b, steps = 1000, h = 1e-5):
-    inflections = []                                            # Initialize list of found inflection points
-    dx          = (b - a) / steps                               # Step size
-    prev_d2     = None                                          # Previous second derivative value
-    for i in range(steps + 1):                                  # Loop through all sample points
-        xi = a + i * dx                                         # Current x
-        try:
-            d2i = (f(xi + h) - 2*f(xi) + f(xi - h)) / (h ** 2)  # Second derivative at xi
-        except:
-            prev_d2 = None
-            continue
-        if prev_d2 is not None and prev_d2 * d2i < 0:          # Sign change in f'' → inflection between points
-            mid = xi - dx / 2                                   # Approximate inflection as midpoint
-            inflections.append(round(mid, 8))                   # Add to list rounded for display
-        prev_d2 = d2i                                           # Update previous second derivative
-    return inflections                                          # Return all found inflection points
+# Formula: (DV/dt)ᵏ = (dV/dt)ᵏ + Γᵏᵢⱼ σ'ⁱ Vʲ — covariant derivative of V along a curve
+def CovariantDerivative(surface, u, v, V, sigma_prime, dV_dt, h=_H):
+    G3=ChristoffelSymbols(surface,u,v,h); result=list(dV_dt)
+    for k in range(2):
+        for i in range(2):
+            for j in range(2):
+                result[k] += G3[k][i][j]*sigma_prime[i]*V[j]
+    return result                                              # Complete covariant derivative
 
-# Formula: classify each critical point using the second derivative test
-# Returns a list of (x, classification) tuples for all critical points in [a, b]
-# Classification is "minimum", "maximum", or "inconclusive"
-def ClassifyCriticalPoints(f, a, b, steps = 1000, h = 1e-5):
-    criticals = FindCriticalPoints(f, a, b, steps, h)           # Find all critical points first
-    results   = []                                              # Initialize results list
-    for xc in criticals:                                        # Loop through each critical point
-        d2 = (f(xc + h) - 2*f(xc) + f(xc - h)) / (h ** 2)    # Second derivative at xc
-        if d2 > 1e-6:                                           # Positive → concave up → local minimum
-            results.append((xc, "minimum"))
-        elif d2 < -1e-6:                                        # Negative → concave down → local maximum
-            results.append((xc, "maximum"))
-        else:                                                   # Near zero → inconclusive
-            results.append((xc, "inconclusive"))
-    return results                                              # Return list of (x, classification) pairs
+# Formula: DV/dt = 0 iff V is parallel-transported along the curve
+def IsParallelTransport(surface, u, v, V, sigma_prime, dV_dt, tol=1e-4, h=_H):
+    DV=CovariantDerivative(surface,u,v,V,sigma_prime,dV_dt,h)
+    return all(abs(DV[k])<tol for k in range(2))
+
+# ============================================================
+# GEODESICS
+# ============================================================
+
+# Formula: geodesic equation  ü^k + Γᵏᵢⱼ u̇ⁱ u̇ʲ = 0
+# Integrates using 4th-order Runge-Kutta; returns list of (u,v) parameter pairs
+def GeodesicPath(surface, u0, v0, du0, dv0, s_max=2.0, n=400):
+    dt=s_max/n; state=[float(u0),float(v0),float(du0),float(dv0)]; path=[(state[0],state[1])]
+    def drv(s):
+        u,v,du,dv=s; G3=ChristoffelSymbols(surface,u,v)
+        ddu=-(G3[0][0][0]*du*du+2.0*G3[0][0][1]*du*dv+G3[0][1][1]*dv*dv)
+        ddv=-(G3[1][0][0]*du*du+2.0*G3[1][0][1]*du*dv+G3[1][1][1]*dv*dv)
+        return [du,dv,ddu,ddv]
+    for _ in range(n):
+        k1=drv(state); k2=drv([state[i]+0.5*dt*k1[i] for i in range(4)])
+        k3=drv([state[i]+0.5*dt*k2[i] for i in range(4)])
+        k4=drv([state[i]+dt*k3[i] for i in range(4)])
+        state=[state[i]+dt*(k1[i]+2.0*k2[i]+2.0*k3[i]+k4[i])/6.0 for i in range(4)]
+        path.append((state[0],state[1]))
+    return path                                                # Complete geodesic (u,v) path
+
+# Returns the total metric arc length of a geodesic path list [(u,v),...]
+def GeodesicLength(surface, path):
+    total=0.0
+    for i in range(1, len(path)):
+        u0,v0=path[i-1]; u1,v1=path[i]; um,vm=(u0+u1)/2.0,(v0+v1)/2.0
+        E,F,G=FirstFundamentalForm(surface,um,vm); du,dv=u1-u0,v1-v0
+        total+=math.sqrt(max(0.0,E*du*du+2.0*F*du*dv+G*dv*dv))
+    return total
+
+# Returns True if σ(t) satisfies the geodesic equations at t (within tolerance)
+def IsGeodesic(surface, sigma, t, tol=1e-3, h=_H):
+    du =_d1(lambda s:sigma(s)[0],t,h); dv =_d1(lambda s:sigma(s)[1],t,h)
+    ddu=_d2(lambda s:sigma(s)[0],t,h); ddv=_d2(lambda s:sigma(s)[1],t,h)
+    u,v=sigma(t); G3=ChristoffelSymbols(surface,u,v,h)
+    eu=ddu+G3[0][0][0]*du*du+2.0*G3[0][0][1]*du*dv+G3[0][1][1]*dv*dv
+    ev=ddv+G3[1][0][0]*du*du+2.0*G3[1][0][1]*du*dv+G3[1][1][1]*dv*dv
+    return abs(eu)<tol and abs(ev)<tol
+
+# ============================================================
+# DIFFERENTIAL FORMS
+# ============================================================
+
+# Formula: df = (∂f/∂x)dx + (∂f/∂y)dy + (∂f/∂z)dz — exterior derivative of 0-form f
+# Returns 1-form coefficients [∂f/∂x, ∂f/∂y, ∂f/∂z] at (x,y,z)
+def ExteriorDerivative0Form(f, x, y, z, h=_H):
+    return [(f(x+h,y,z)-f(x-h,y,z))/(2.0*h),
+            (f(x,y+h,z)-f(x,y-h,z))/(2.0*h),
+            (f(x,y,z+h)-f(x,y,z-h))/(2.0*h)]                 # Complete gradient 1-form
+
+# Formula: dω for ω = P dx + Q dy + R dz
+# dω = (∂R/∂y−∂Q/∂z) dy∧dz + (∂P/∂z−∂R/∂x) dz∧dx + (∂Q/∂x−∂P/∂y) dx∧dy
+# P,Q,R are callables (x,y,z)->float; returns [A,B,C] coefficients of the 2-form
+def ExteriorDerivative1Form(P, Q, R, x, y, z, h=_H):
+    def pd(fn,var):
+        if   var=='x': return (fn(x+h,y,z)-fn(x-h,y,z))/(2.0*h)
+        elif var=='y': return (fn(x,y+h,z)-fn(x,y-h,z))/(2.0*h)
+        else:          return (fn(x,y,z+h)-fn(x,y,z-h))/(2.0*h)
+    return [pd(R,'y')-pd(Q,'z'), pd(P,'z')-pd(R,'x'), pd(Q,'x')-pd(P,'y')]  # [A,B,C]
+
+# Formula: d(A dy∧dz + B dz∧dx + C dx∧dy) = (∂A/∂x + ∂B/∂y + ∂C/∂z) dx∧dy∧dz
+# Returns the scalar coefficient of the resulting 3-form (divergence)
+def ExteriorDerivative2Form(A_fn, B_fn, C_fn, x, y, z, h=_H):
+    dA=(A_fn(x+h,y,z)-A_fn(x-h,y,z))/(2.0*h)
+    dB=(B_fn(x,y+h,z)-B_fn(x,y-h,z))/(2.0*h)
+    dC=(C_fn(x,y,z+h)-C_fn(x,y,z-h))/(2.0*h)
+    return dA+dB+dC                                            # ∂A/∂x + ∂B/∂y + ∂C/∂z
+
+# Formula: α ∧ β for 1-forms α=[P₁,Q₁,R₁], β=[P₂,Q₂,R₂] (values at a point)
+def WedgeProduct1Forms(alpha, beta):
+    P1,Q1,R1=alpha; P2,Q2,R2=beta
+    return [Q1*R2-R1*Q2, R1*P2-P1*R2, P1*Q2-Q1*P2]           # [dy∧dz, dz∧dx, dx∧dy] coeffs
+
+# Formula: pullback φ*ω under φ:ℝ²→ℝ³
+# Returns [coeff of ds, coeff of dt] of the pulled-back 1-form at (s,t)
+def PullbackOf1Form(P_fn, Q_fn, R_fn, phi, s, t, h=_H):
+    ds=_pu(phi,s,t,h); dt_=_pv(phi,s,t,h); pt=phi(s,t)
+    om=[P_fn(*pt), Q_fn(*pt), R_fn(*pt)]
+    return [_dot(om,ds), _dot(om,dt_)]                         # Complete pullback
+
+# Formula: ∫_C ω — line integral of 1-form ω = P dx + Q dy + R dz along γ:[a,b]→ℝ³
+def LineIntegralOf1Form(P_fn, Q_fn, R_fn, curve, a, b, n=1000):
+    h=(b-a)/n; total=0.0
+    for i in range(n):
+        t=a+(i+0.5)*h; pt=curve(t); vt=_d1(curve,t)
+        total+=(P_fn(*pt)*vt[0]+Q_fn(*pt)*vt[1]+R_fn(*pt)*vt[2])*h
+    return total                                               # Complete ∫_C ω
+
+# ============================================================
+# RIEMANNIAN GEOMETRY
+# ============================================================
+
+# Formula: Rᵏₗᵢⱼ = ∂ᵢΓᵏⱼˡ − ∂ⱼΓᵏᵢˡ + ΓᵐⱼˡΓᵏᵢₘ − ΓᵐᵢˡΓᵏⱼₘ — Riemann curvature tensor
+# Returns R[k][l][i][j] — 2×2×2×2 array at (u,v)
+def RiemannCurvatureTensor(surface, u, v, h=_H):
+    G0=ChristoffelSymbols(surface,u,v,h)
+    Gup=ChristoffelSymbols(surface,u+h,v,h); Gum=ChristoffelSymbols(surface,u-h,v,h)
+    Gvp=ChristoffelSymbols(surface,u,v+h,h); Gvm=ChristoffelSymbols(surface,u,v-h,h)
+    dG=[[[(Gup[k][i][j]-Gum[k][i][j])/(2.0*h) for j in range(2)] for i in range(2)] for k in range(2)],\
+       [[[(Gvp[k][i][j]-Gvm[k][i][j])/(2.0*h) for j in range(2)] for i in range(2)] for k in range(2)]
+    R=[[[[0.0]*2 for _ in range(2)] for _ in range(2)] for _ in range(2)]
+    for k in range(2):
+        for l in range(2):
+            for i in range(2):
+                for j in range(2):
+                    val=dG[i][k][j][l]-dG[j][k][i][l]
+                    for m in range(2):
+                        val+=G0[m][j][l]*G0[k][i][m]-G0[m][i][l]*G0[k][j][m]
+                    R[k][l][i][j]=val
+    return R                                                   # Complete Riemann tensor
+
+# Formula: Rᵢⱼ = Σₖ Rᵏᵢₖⱼ — Ricci tensor (contraction of Riemann)
+def RicciTensor(surface, u, v, h=_H):
+    R=RiemannCurvatureTensor(surface,u,v,h)
+    return [[sum(R[k][i][k][j] for k in range(2)) for j in range(2)] for i in range(2)]
+
+# Formula: R = gⁱʲ Rᵢⱼ — scalar curvature (= 2K for a 2D surface)
+def ScalarCurvature(surface, u, v, h=_H):
+    E,F,G=FirstFundamentalForm(surface,u,v,h); det=E*G-F*F
+    if abs(det)<1e-14: return 0.0
+    gi=[[G/det,-F/det],[-F/det,E/det]]; Ric=RicciTensor(surface,u,v,h)
+    return sum(gi[i][j]*Ric[i][j] for i in range(2) for j in range(2))  # Complete R = gⁱʲRᵢⱼ
+
+# ============================================================
+# SPECIAL SURFACES — CLOSED-FORM RESULTS
+# ============================================================
+
+# Sphere of radius r — (θ,φ) ∈ [0,π]×[0,2π)
+# Returns (surface_fn, K, H, area) with exact closed-form values
+def Sphere(r=1.0):
+    def surface(theta,phi):
+        return [r*math.sin(theta)*math.cos(phi), r*math.sin(theta)*math.sin(phi), r*math.cos(theta)]
+    return surface, 1.0/r**2, 1.0/r, 4.0*math.pi*r**2         # K=1/r², H=1/r, A=4πr²
+
+# Torus with major radius R and tube radius a — (θ,φ) ∈ [0,2π)²
+# Returns (surface_fn, K_fn, H_fn, area)
+def Torus(R=2.0, a=1.0):
+    def surface(theta,phi):
+        return [(R+a*math.cos(phi))*math.cos(theta), (R+a*math.cos(phi))*math.sin(theta), a*math.sin(phi)]
+    K_fn=lambda t,p: math.cos(p)/(a*(R+a*math.cos(p)))
+    H_fn=lambda t,p: (R+2.0*a*math.cos(p))/(2.0*a*(R+a*math.cos(p)))
+    return surface, K_fn, H_fn, 4.0*math.pi**2*R*a             # A = 4π²Ra
+
+# Cylinder of radius r — (θ,z)
+# Returns (surface_fn, K=0, H=1/(2r))
+def Cylinder(r=1.0):
+    def surface(theta,z): return [r*math.cos(theta), r*math.sin(theta), z]
+    return surface, 0.0, 1.0/(2.0*r)                           # K=0, H=1/(2r)
+
+# Paraboloid z = u²+v² — (u,v) ∈ ℝ²
+# Returns (surface_fn, K_fn, H_fn)
+def Paraboloid():
+    def surface(u,v): return [u, v, u*u+v*v]
+    K_fn=lambda u,v: 4.0/(1.0+4.0*u*u+4.0*v*v)**2
+    H_fn=lambda u,v: (1.0+2.0*u*u+2.0*v*v)/(1.0+4.0*u*u+4.0*v*v)**1.5
+    return surface, K_fn, H_fn
+
+# Saddle z = u²−v² — classic hyperbolic surface
+# Returns (surface_fn, K_fn, H_fn)
+def Saddle():
+    def surface(u,v): return [u, v, u*u-v*v]
+    K_fn=lambda u,v: -4.0/(1.0+4.0*u*u+4.0*v*v)**2            # K always negative
+    H_fn=lambda u,v: (2.0*u*u-2.0*v*v)/(1.0+4.0*u*u+4.0*v*v)**1.5
+    return surface, K_fn, H_fn
+
+# Formula: Gauss-Bonnet — for a closed surface ∫∫ K dA = 2πχ
+# Returns (χ_float, χ_nearest_int) from a numerically computed total curvature integral
+def GaussBonnetCheck(total_K_integral):
+    chi = total_K_integral/(2.0*math.pi)
+    return chi, round(chi)                                     # χ = (∫∫K dA) / (2π)

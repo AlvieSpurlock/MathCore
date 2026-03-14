@@ -6,10 +6,14 @@ import re
 import math
 import textwrap
 
+import Config                                              # Validation and RNG
 from MathTypes.Basic import BasicMath                      # Basic arithmetic operations
 from MathTypes.Physics import Physics_1D                   # 1D kinematics
 from MathTypes.Physics import Physics_2D                   # 2D vectors and projectiles
 from MathTypes.Physics import Physics_3D                   # 3D vectors and projectiles
+import MathTypes.Physics.Physics_Energy as PEnergy         # Energy, work, power, IsWork
+import MathTypes.Physics.Physics_Springs as PSprings       # Springs, SHM, Hooke's law
+import MathTypes.Physics.Physics_Momentum as PMomentum     # Momentum, impulse, center of mass
 import MathTypes.Physics.Forces as Forces                  # Forces, friction, tension, circular motion
 import MathTypes.Basic.Algebra as Algebra                  # Algebra functions
 import MathTypes.Basic.Geometry as Geometry                # Geometry functions
@@ -19,7 +23,12 @@ import MathTypes.Advanced.Differential as Diff             # Differentiation fun
 import MathTypes.Advanced.Statistics as Stat               # Statistics functions
 import MathTypes.Advanced.Probability as Prob              # Probability functions
 import MathTypes.Advanced.Combinatorics as Comb            # Combinatorics functions
-import Config                                              # Validation and RNG
+import MathTypes.Advanced.DiscreteMath as Discrete          # Discrete Mathematics functions
+import MathTypes.Advanced.LinearAlgebra as LinAlg          # Linear Algebra functions
+import MathTypes.Advanced.Differential as DiffGeo  # Differential Geometry functions
+import MathTypes.Advanced.AbstractAlgebra as AbsAlg        # Abstract Algebra functions
+import MathTypes.Advanced.Topology as Topo                 # Topology functions
+import MathTypes.Advanced.AlgebraicGeometry as AlgGeo      # Algebraic Geometry functions
 
 
 # ============================================================
@@ -188,7 +197,12 @@ def _SectionHeader(title, subtitle=''):
     print()
 
 def CollectVariables():
-    """Collects an unlimited list of numbers from the user. Used by add/sub/mul/div."""
+    """
+    Collects an unlimited list of numbers from the user.
+    Used by add / sub / mul / div.
+    Enter (0) at the action menu to cancel and return to function selection.
+    Raises _AskAbort on cancel so the caller's except block handles it.
+    """
     variables = []
     while True:
         print()
@@ -203,10 +217,14 @@ def CollectVariables():
         print('  (2)  Remove a variable')
         print('  (3)  Confirm and calculate')
         print()
-        action = int(input('  Enter a number to choose: '))
+        _ExitBar('Cancel and return to function list')
+        print()
+        action = _menu_int('  Enter a number to choose: ')
+        if action == 0:
+            raise _AskAbort()                                  # User chose to cancel
         match action:
             case 1:
-                val = float(input('  Enter a value: '))
+                val = _ask('  Enter a value: ', cast=float)
                 variables.append(val)
                 print(f"  Added {val}. You now have {len(variables)} variable(s).")
             case 2:
@@ -220,7 +238,7 @@ def CollectVariables():
                     for i, v in enumerate(variables):
                         print(f"    {i + 1}.  {v}")
                     print()
-                    pick = int(input('  Enter the number of the variable to remove: '))
+                    pick = _ask('  Enter the number of the variable to remove: ', cast=int)
                     if pick < 1 or pick > len(variables):
                         print()
                         print(f"  Please enter a number between 1 and {len(variables)}.")
@@ -232,7 +250,7 @@ def CollectVariables():
                         print('  (1)  Yes — remove it')
                         print('  (2)  No — go back')
                         print()
-                        confirm = int(input('  Enter a number to choose: '))
+                        confirm = _menu_int('  Enter a number to choose: ')
                         if confirm == 1:
                             variables.pop(pick - 1)
                             print(f"  Removed {selected}. You now have {len(variables)} variable(s).")
@@ -266,6 +284,15 @@ def Debug():
         print('  (8)   Statistics')
         print('  (9)   Probability')
         print('  (10)  Combinatorics')
+        print('  (11)  Discrete Mathematics')
+        print('  (12)  Linear Algebra')
+        print('  (13)  Differential Geometry')
+        print('  (14)  Abstract Algebra')
+        print('  (15)  Topology')
+        print('  (16)  Algebraic Geometry')
+        print('  (17)  Physics — Energy & Work')
+        print('  (18)  Physics — Springs & SHM')
+        print('  (19)  Physics — Momentum & Impulse')
         print()
         _ExitBar('Exit MathCore Debug')
         print()
@@ -286,6 +313,15 @@ def Debug():
             case 8:  StatisticsDebug()
             case 9:  ProbabilityDebug()
             case 10: CombinatoricsDebug()
+            case 11: DiscreteMathDebug()
+            case 12: LinearAlgebraDebug()
+            case 13: DifferentialGeometryDebug()
+            case 14: AbstractAlgebraDebug()
+            case 15: TopologyDebug()
+            case 16: AlgebraicGeometryDebug()
+            case 17: PhysicsEnergyDebug()
+            case 18: PhysicsSpringsDebug()
+            case 19: PhysicsMomentumDebug()
             case _:  print('\n  That was not a valid option. Please try again.')
 
 # ============================================================
@@ -304,7 +340,7 @@ def BasicMathDebug():
         print()
         _ExitBar('Return to main menu')
         print()
-        sec = int(input('  Select a section: '))
+        sec = _menu_int('  Select a section: ')
         if sec == 0: return
         if sec < 1 or sec > len(SECTIONS):
             print('\n  That was not a valid section.')
@@ -323,57 +359,122 @@ def BasicMathDebug():
             print()
             _ExitBar('Return to sections')
             print()
-            choice = int(input('  Select a function: '))
+            choice = _menu_int('  Select a function: ')
             if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
             result = None
-            if sec == 1:
-                match choice:
-                    case 1:
-                        print()
-                        print('  Add — enter as many numbers as you want.')
-                        variables = CollectVariables()
-                        result = variables[0]
-                        for v in variables[1:]:
-                            result = BasicMath.add(result, v)
-                        print(f"\n  Adding: {" + ".join(str(v) for v in variables)}")
-                    case 2:
-                        print()
-                        print('  Subtract — each is subtracted from the previous.')
-                        variables = CollectVariables()
-                        result = variables[0]
-                        for v in variables[1:]:
-                            result = BasicMath.sub(result, v)
-                        print(f"\n  Subtracting: {" - ".join(str(v) for v in variables)}")
-                    case 3:
-                        print()
-                        print('  Multiply — enter as many numbers as you want.')
-                        variables = CollectVariables()
-                        result = variables[0]
-                        for v in variables[1:]:
-                            result = BasicMath.multi(result, v)
-                        print(f"\n  Multiplying: {" × ".join(str(v) for v in variables)}")
-                    case 4:
-                        print()
-                        print('  Divide — each divides the previous result.')
-                        variables = CollectVariables()
-                        result = variables[0]
-                        for v in variables[1:]:
-                            result = BasicMath.div(result, v)
-                        print(f"\n  Dividing: {" ÷ ".join(str(v) for v in variables)}")
-                    case _:
-                        print('\n  That was not a valid option.')
-                        continue
-            elif sec == 2:
-                match choice:
-                    case 1:
-                        result = Config.Checks.IsEven(int(input('  Enter a number to check: ')))
-                    case 2:
-                        result = BasicMath.mod(int(input('  First number: ')), int(input('  Divide by (get remainder): ')))
-                    case 3:
-                        result = Config.RNG.rand(int(input('  Minimum value: ')), int(input('  Maximum value: ')))
-                    case _:
-                        print('\n  That was not a valid option.')
-                        continue
+            try:
+                if sec == 1:
+                    match choice:
+                        case 1:
+                            print()
+                            print('  Add — enter as many numbers as you want.')
+                            variables = CollectVariables()
+                            result = variables[0]
+                            for v in variables[1:]:
+                                result = BasicMath.add(result, v)
+                            print(f"\n  Adding: {' + '.join(str(v) for v in variables)}")
+                        case 2:
+                            # ── Subtraction with negative-result handling ──────────────────
+                            print()
+                            print('  Subtract — each value is subtracted from the previous.')
+                            print()
+                            print('  Allow negative results?')
+                            print('  (1)  Yes — allow negatives')
+                            print('  (2)  No  — auto-adjust order to stay positive')
+                            print()
+                            allow_neg = _menu_int('  Choose: ') != 2   # default allow
+                            while True:
+                                variables = CollectVariables()
+                                # Try subtraction in given order
+                                result = variables[0]
+                                for v in variables[1:]:
+                                    result = BasicMath.sub(result, v)
+                                expr = ' - '.join(str(v) for v in variables)
+                                if result >= 0 or allow_neg:
+                                    print(f"\n  Subtracting: {expr}")
+                                    break
+                                # Result is negative — try sorting descending to keep positive
+                                sorted_vars = sorted(variables, reverse=True)
+                                sorted_result = sorted_vars[0]
+                                for v in sorted_vars[1:]:
+                                    sorted_result = BasicMath.sub(sorted_result, v)
+                                sorted_expr = ' - '.join(str(v) for v in sorted_vars)
+                                if sorted_result >= 0:
+                                    print()
+                                    print(f"  ℹ  Original order gave a negative result ({result}).")
+                                    print(f"  ℹ  Re-ordered to keep the result positive: {sorted_expr} = {sorted_result}")
+                                    result = sorted_result
+                                    expr   = sorted_expr
+                                    variables = sorted_vars
+                                    break
+                                else:
+                                    # Still negative after reorder
+                                    print()
+                                    print(f"  ✗  The result is still negative ({sorted_result}) even after reordering.")
+                                    print()
+                                    print('  Would you like to:')
+                                    print('  (1)  Allow the negative result')
+                                    print('  (2)  Re-enter the numbers')
+                                    print()
+                                    retry = _menu_int('  Choose: ')
+                                    if retry == 1:
+                                        allow_neg = True        # Accept it this time
+                                        result = sorted_result if sorted_result < result else result
+                                        result = variables[0]
+                                        for v in variables[1:]:
+                                            result = BasicMath.sub(result, v)
+                                        break
+                                    else:
+                                        print()
+                                        print('  Starting over — please re-enter your numbers.')
+                                        # loop back to CollectVariables
+                            print(f"\n  Subtracting: {expr}")
+                        case 3:
+                            print()
+                            print('  Multiply — enter as many numbers as you want.')
+                            variables = CollectVariables()
+                            result = variables[0]
+                            for v in variables[1:]:
+                                result = BasicMath.multi(result, v)
+                            print(f"\n  Multiplying: {' × '.join(str(v) for v in variables)}")
+                        case 4:
+                            print()
+                            print('  Divide — each divides the previous result.')
+                            variables = CollectVariables()
+                            result = variables[0]
+                            for v in variables[1:]:
+                                result = BasicMath.div(result, v)
+                            print(f"\n  Dividing: {' ÷ '.join(str(v) for v in variables)}")
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+                elif sec == 2:
+                    match choice:
+                        case 1:
+                            result = Config.Checks.IsEven(_ask('  Enter a number to check: ', cast=int))
+                        case 2:
+                            a = _ask('  First number: ', cast=int)
+                            b = _ask('  Divide by (get remainder): ', cast=int)
+                            result = BasicMath.mod(a, b)
+                        case 3:
+                            lo = _ask('  Minimum value: ', cast=int)
+                            hi = _ask('  Maximum value: ', cast=int)
+                            result = Config.RNG.rand(lo, hi)
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except (ValueError, TypeError, ZeroDivisionError) as e:
+                print(f'\n  Error: {e}  Please try again.')
+                print()
+                continue
             if result is not None:
                 print()
                 print(f"  Result: {result}")
@@ -389,14 +490,31 @@ def BasicMathDebug():
 
 def PhysicsDebug():
     while True:
-        _SectionHeader('Physics', 'Choose a sub-module')
-        print('  (1)  Kinematics 1D')
-        print('  (2)  Kinematics 2D')
-        print('  (3)  Kinematics 3D')
-        print('  (4)  Forces 2D')
-        print('  (5)  Forces 3D')
+        _SectionHeader('Physics', 'Choose a category')
+        print('  (1)  Kinematics')
+        print('  (2)  Forces')
         print()
         _ExitBar('Return to main menu')
+        print()
+        choice = _menu_int('  Choose: ')
+        if choice == 0: return
+        match choice:
+            case 1: KinematicsDebug()
+            case 2: ForcesDebug()
+            case _: print('\n  That was not a valid option. Please try again.')
+
+# ────────────────────────────────────────────────────────────
+# KINEMATICS — dimensional sub-router
+# ────────────────────────────────────────────────────────────
+
+def KinematicsDebug():
+    while True:
+        _SectionHeader('Kinematics', 'Choose a dimension')
+        print('  (1)  1D  — motion along a straight line')
+        print('  (2)  2D  — planar motion, projectile, forces')
+        print('  (3)  3D  — three-dimensional motion')
+        print()
+        _ExitBar('Return to Physics menu')
         print()
         choice = _menu_int('  Choose: ')
         if choice == 0: return
@@ -404,8 +522,25 @@ def PhysicsDebug():
             case 1: Physics1DDebug()
             case 2: Physics2DDebug()
             case 3: Physics3DDebug()
-            case 4: Forces2DDebug()
-            case 5: Forces3DDebug()
+            case _: print('\n  That was not a valid option. Please try again.')
+
+# ────────────────────────────────────────────────────────────
+# FORCES — dimensional sub-router
+# ────────────────────────────────────────────────────────────
+
+def ForcesDebug():
+    while True:
+        _SectionHeader('Forces', 'Choose a dimension')
+        print('  (1)  2D  — forces in a plane')
+        print('  (2)  3D  — forces in three-dimensional space')
+        print()
+        _ExitBar('Return to Physics menu')
+        print()
+        choice = _menu_int('  Choose: ')
+        if choice == 0: return
+        match choice:
+            case 1: Forces2DDebug()
+            case 2: Forces3DDebug()
             case _: print('\n  That was not a valid option. Please try again.')
 
 # ============================================================
@@ -427,7 +562,7 @@ def Physics1DDebug():
         print()
         _ExitBar('Return to main menu')
         print()
-        sec = int(input('  Select a section: '))
+        sec = _menu_int('  Select a section: ')
         if sec == 0: return
         if sec < 1 or sec > len(SECTIONS):
             print('\n  That was not a valid section.')
@@ -470,243 +605,253 @@ def Physics1DDebug():
             print()
             _ExitBar('Return to sections')
             print()
-            choice = int(input('  Select a function: '))
+            choice = _menu_int('  Select a function: ')
             if choice == 0: break
             result = None
-            if sec == 1:
-                match choice:
-                    case 1:
-                        result = Physics_1D.GetDistance(
-                            float(input('  Starting position (m): ')),
-                            float(input('  Ending position (m): '))
-                        )
-                    case 2:
-                        result = Physics_1D.GetTime(
-                            float(input('  Start time (s): ')),
-                            float(input('  End time (s): '))
-                        )
-                    case 3:
-                        result = Physics_1D.Velocity(
-                            float(input('  Distance traveled (m): ')),
-                            float(input('  Time taken (s): '))
-                        )
-                    case 4:
-                        result = Physics_1D.FinalVelocity(
-                            float(input('  Acceleration (m/s²): ')),
-                            float(input('  Distance (m): ')),
-                            float(input('  Time (s): ')),
-                            float(input('  Starting velocity (m/s): '))
-                        )
-                    case 5:
-                        result = Physics_1D.Acceleration(
-                            float(input('  Starting velocity (m/s): ')),
-                            float(input('  Ending velocity (m/s): ')),
-                            float(input('  Time (s): '))
-                        )
-                    case 6:
-                        result = Physics_1D.InstantAcceleration(
-                            float(input('  Starting velocity (m/s): ')),
-                            float(input('  Ending velocity (m/s): ')),
-                            float(input('  Time interval (s) — use a very small value for instantaneous: '))
-                        )
-                    case 7:
-                        result = Physics_1D.ConstantAcceleration(
-                            float(input('  Starting velocity (m/s): ')),
-                            float(input('  Ending velocity (m/s): ')),
-                            float(input('  Time (s): '))
-                        )
-                    case 8:
-                        result = Physics_1D.GetDisplacement(
-                            float(input('  Acceleration (m/s²): ')),
-                            float(input('  Time (s): ')),
-                            float(input('  Starting velocity (m/s — enter 0 if starting from rest): '))
-                        )
-                    case 9:
-                        result = Physics_1D.GetPosition(
-                            float(input('  Acceleration (m/s²): ')),
-                            float(input('  Time (s): ')),
-                            float(input('  Starting velocity (m/s — enter 0 if starting from rest): ')),
-                            float(input('  Starting position (m — enter 0 if at the origin): '))
-                        )
-                    case _:
-                        print('\n  That was not a valid option.')
-                        continue
-            elif sec == 2:
-                match choice:
-                    case 1:
-                        result = Physics_1D.SolveForTime(
-                            float(input('  Distance to travel (m): ')),
-                            float(input('  Constant speed (m/s): '))
-                        )
-                        print(f"\n  Time to travel that distance: {result:.4f} s")
-                        print()
-                        continue
-                    case 2:
-                        result = Physics_1D.SolveForDistance(
-                            float(input('  Speed (m/s): ')),
-                            float(input('  Time (s): '))
-                        )
-                        print(f"\n  Distance traveled: {result:.4f} m")
-                        print()
-                        continue
-                    case 3:
-                        v_base  = float(input('  Base speed (m/s): '))
-                        delta_v = float(input('  Speed difference (m/s — negative to go slower): '))
-                        result  = Physics_1D.SpeedWithDelta(v_base, delta_v)
-                        print(f"\n  New speed: {result:.4f} m/s")
-                        print()
-                        continue
-                    case 4:
-                        distance = float(input('  Distance of the course (m): '))
-                        v_base   = float(input('  Baseline speed to beat (m/s): '))
-                        delta_v  = float(input('  Amount faster than the baseline (m/s): '))
-                        result   = Physics_1D.TimeWithSpeedDelta(distance, v_base, delta_v)
-                        print(f"\n  New speed: {Physics_1D.SpeedWithDelta(v_base, delta_v):.4f} m/s")
-                        print(f"  Time through the course: {result:.4f} s")
-                        print()
-                        continue
-                    case _:
-                        print('\n  That was not a valid option.')
-                        continue
-            elif sec == 3:
-                match choice:
-                    case 1:
-                        v_now = float(input('  Current velocity (m/s): '))
-                        a     = float(input('  Constant acceleration (m/s²): '))
-                        dt    = float(input('  How many seconds AFTER this moment: '))
-                        result = Physics_1D.VelocityAfter(v_now, a, dt)
-                        print(f"\n  Velocity {dt} s later: {result:.4f} m/s")
-                        print()
-                        continue
-                    case 2:
-                        v_now = float(input('  Current velocity (m/s): '))
-                        a     = float(input('  Constant acceleration (m/s²): '))
-                        dt    = float(input('  How many seconds BEFORE this moment: '))
-                        result = Physics_1D.VelocityBefore(v_now, a, dt)
-                        print(f"\n  Velocity {dt} s earlier: {result:.4f} m/s")
-                        print()
-                        continue
-                    case 3:
-                        v_initial = float(input('  Earlier velocity (m/s): '))
-                        v_final   = float(input('  Later velocity (m/s): '))
-                        a         = float(input('  Constant acceleration (m/s²): '))
-                        result    = Physics_1D.TimeBetweenVelocities(v_initial, v_final, a)
-                        print(f"\n  Time between those velocities: {result:.4f} s")
-                        print()
-                        continue
-                    case 4:
-                        v_ref    = float(input('  Known velocity at reference time (m/s): '))
-                        t_ref    = float(input('  Reference time (s): '))
-                        a        = float(input('  Constant acceleration (m/s²): '))
-                        t_target = float(input('  Target time to find velocity at (s): '))
-                        result   = Physics_1D.VelocityAtTime(v_ref, t_ref, a, t_target)
-                        direction = 'earlier' if t_target < t_ref else 'later'
-                        print(f"\n  Velocity at t = {t_target} s ({direction}): {result:.4f} m/s")
-                        print()
-                        continue
-                    case 5:
-                        x_now = float(input('  Current position (m — 0 for relative): '))
-                        v_now = float(input('  Current velocity (m/s): '))
-                        a     = float(input('  Constant acceleration (m/s²): '))
-                        dt    = float(input('  How many seconds BEFORE this moment: '))
-                        result = Physics_1D.PositionBefore(x_now, v_now, a, dt)
-                        print(f"\n  Position {dt} s earlier: {result:.4f} m")
-                        print()
-                        continue
-                    case _:
-                        print('\n  That was not a valid option.')
-                        continue
-            elif sec == 4:
-                match choice:
-                    case 1:
-                        v0    = float(input('  Initial speed (m/s): '))
-                        decel = float(input('  Deceleration magnitude (m/s² — positive): '))
-                        result = Physics_1D.StoppingTime(v0, decel)
-                        print(f"\n  Time to stop: {result:.4f} s")
-                        print()
-                        continue
-                    case 2:
-                        v0    = float(input('  Initial speed (m/s): '))
-                        decel = float(input('  Deceleration magnitude (m/s² — positive): '))
-                        result = Physics_1D.StoppingDistance(v0, decel)
-                        print(f"\n  Distance traveled while stopping: {result:.4f} m")
-                        print()
-                        continue
-                    case 3:
-                        v0    = float(input('  Initial speed at start of braking (m/s): '))
-                        decel = float(input('  Deceleration magnitude (m/s² — positive): '))
-                        t     = float(input('  Time after braking began (s): '))
-                        result = Physics_1D.VelocityWhileStopping(v0, decel, t)
-                        print(f"\n  Velocity at t = {t} s during braking: {result:.4f} m/s")
-                        if result == 0:
-                            print('  (Object has already stopped by this time)')
-                        print()
-                        continue
-                    case 4:
-                        v0    = float(input('  Initial speed at start of braking (m/s): '))
-                        decel = float(input('  Deceleration magnitude (m/s² — positive): '))
-                        t     = float(input('  Time after braking began (s): '))
-                        result = Physics_1D.PositionWhileStopping(v0, decel, t)
-                        t_stop = Physics_1D.StoppingTime(v0, decel)
-                        print(f"\n  Position at t = {t} s during braking: {result:.4f} m from braking start")
-                        if t >= t_stop:
-                            print(f"  (Object stopped at t = {t_stop:.4f} s)")
-                        print()
-                        continue
-                    case _:
-                        print('\n  That was not a valid option.')
-                        continue
-            elif sec == 5:
-                match choice:
-                    case 1:
-                        v_final = float(input('  Impact velocity (m/s): '))
-                        g       = float(input('  Gravity (m/s², Enter = 9.8): ') or '9.8')
-                        v0      = float(input('  Initial vertical velocity (0 if dropped): ') or '0')
-                        result  = Physics_1D.HeightFromFinalVelocity(v_final, float(g), float(v0))
-                        print(f"\n  Height fallen from: {result:.4f} m")
-                        print()
-                        continue
-                    case 2:
-                        v_final = float(input('  Impact velocity (m/s): '))
-                        g       = float(input('  Gravity (m/s², Enter = 9.8): ') or '9.8')
-                        v0      = float(input('  Initial vertical velocity (0 if dropped): ') or '0')
-                        result  = Physics_1D.FreeFallTime(v_final, float(g), float(v0))
-                        print(f"\n  Time spent falling: {result:.4f} s")
-                        print()
-                        continue
-                    case 3:
-                        h  = float(input('  Height of the fall (m): '))
-                        g  = float(input('  Gravity (m/s², Enter = 9.8): ') or '9.8')
-                        v0 = float(input('  Initial vertical velocity (0 if dropped): ') or '0')
-                        result = Physics_1D.ImpactVelocity(h, float(g), float(v0))
-                        print(f"\n  Impact velocity: {result:.4f} m/s")
-                        print()
-                        continue
-                    case 4:
-                        h  = float(input('  Height of the fall (m): '))
-                        g  = float(input('  Gravity (m/s², Enter = 9.8): ') or '9.8')
-                        v0 = float(input('  Initial downward velocity (0 if dropped from rest): ') or '0')
-                        result = Physics_1D.FreeFallTimeFromHeight(h, float(g), float(v0))
-                        print(f"\n  Time to reach the ground: {result:.4f} s")
-                        print()
-                        continue
-                    case 5:
-                        v0 = float(input('  Initial upward launch speed (m/s): '))
-                        g  = float(input('  Gravity (m/s², Enter = 9.8): ') or '9.8')
-                        result = Physics_1D.MaxHeightFromLaunch(v0, float(g))
-                        print(f"\n  Maximum height reached: {result:.4f} m")
-                        print()
-                        continue
-                    case 6:
-                        v0 = float(input('  Initial upward launch speed (m/s): '))
-                        g  = float(input('  Gravity (m/s², Enter = 9.8): ') or '9.8')
-                        result = Physics_1D.TimeToMaxHeight(v0, float(g))
-                        print(f"\n  Time to reach peak: {result:.4f} s")
-                        print()
-                        continue
-                    case _:
-                        print('\n  That was not a valid option.')
-                        continue
+            try:
+                if sec == 1:
+                    match choice:
+                        case 1:
+                            result = Physics_1D.GetDistance(
+                                _ask('  Starting position (m): ', cast=float),
+                                _ask('  Ending position (m): ', cast=float)
+                            )
+                        case 2:
+                            result = Physics_1D.GetTime(
+                                _ask('  Start time (s): ', cast=float),
+                                _ask('  End time (s): ', cast=float)
+                            )
+                        case 3:
+                            result = Physics_1D.Velocity(
+                                _ask('  Distance traveled (m): ', cast=float),
+                                _ask('  Time taken (s): ', cast=float)
+                            )
+                        case 4:
+                            result = Physics_1D.FinalVelocity(
+                                _ask('  Acceleration (m/s²): ', cast=float),
+                                _ask('  Distance (m): ', cast=float),
+                                _ask('  Time (s): ', cast=float),
+                                _ask('  Starting velocity (m/s): ', cast=float)
+                            )
+                        case 5:
+                            result = Physics_1D.Acceleration(
+                                _ask('  Starting velocity (m/s): ', cast=float),
+                                _ask('  Ending velocity (m/s): ', cast=float),
+                                _ask('  Time (s): ', cast=float)
+                            )
+                        case 6:
+                            result = Physics_1D.InstantAcceleration(
+                                _ask('  Starting velocity (m/s): ', cast=float),
+                                _ask('  Ending velocity (m/s): ', cast=float),
+                                _ask('  Time interval (s) — use a very small value for instantaneous: ', cast=float)
+                            )
+                        case 7:
+                            result = Physics_1D.ConstantAcceleration(
+                                _ask('  Starting velocity (m/s): ', cast=float),
+                                _ask('  Ending velocity (m/s): ', cast=float),
+                                _ask('  Time (s): ', cast=float)
+                            )
+                        case 8:
+                            result = Physics_1D.GetDisplacement(
+                                _ask('  Acceleration (m/s²): ', cast=float),
+                                _ask('  Time (s): ', cast=float),
+                                _ask('  Starting velocity (m/s — enter 0 if starting from rest): ', cast=float)
+                            )
+                        case 9:
+                            result = Physics_1D.GetPosition(
+                                _ask('  Acceleration (m/s²): ', cast=float),
+                                _ask('  Time (s): ', cast=float),
+                                _ask('  Starting velocity (m/s — enter 0 if starting from rest): ', cast=float),
+                                _ask('  Starting position (m — enter 0 if at the origin): ', cast=float)
+                            )
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+                elif sec == 2:
+                    match choice:
+                        case 1:
+                            result = Physics_1D.SolveForTime(
+                                _ask('  Distance to travel (m): ', cast=float),
+                                _ask('  Constant speed (m/s): ', cast=float)
+                            )
+                            print(f"\n  Time to travel that distance: {result:.4f} s")
+                            print()
+                            continue
+                        case 2:
+                            result = Physics_1D.SolveForDistance(
+                                _ask('  Speed (m/s): ', cast=float),
+                                _ask('  Time (s): ', cast=float)
+                            )
+                            print(f"\n  Distance traveled: {result:.4f} m")
+                            print()
+                            continue
+                        case 3:
+                            v_base  = _ask('  Base speed (m/s): ', cast=float)
+                            delta_v = _ask('  Speed difference (m/s — negative to go slower): ', cast=float)
+                            result  = Physics_1D.SpeedWithDelta(v_base, delta_v)
+                            print(f"\n  New speed: {result:.4f} m/s")
+                            print()
+                            continue
+                        case 4:
+                            distance = _ask('  Distance of the course (m): ', cast=float)
+                            v_base   = _ask('  Baseline speed to beat (m/s): ', cast=float)
+                            delta_v  = _ask('  Amount faster than the baseline (m/s): ', cast=float)
+                            result   = Physics_1D.TimeWithSpeedDelta(distance, v_base, delta_v)
+                            print(f"\n  New speed: {Physics_1D.SpeedWithDelta(v_base, delta_v):.4f} m/s")
+                            print(f"  Time through the course: {result:.4f} s")
+                            print()
+                            continue
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+                elif sec == 3:
+                    match choice:
+                        case 1:
+                            v_now = _ask('  Current velocity (m/s): ', cast=float)
+                            a     = _ask('  Constant acceleration (m/s²): ', cast=float)
+                            dt    = _ask('  How many seconds AFTER this moment: ', cast=float)
+                            result = Physics_1D.VelocityAfter(v_now, a, dt)
+                            print(f"\n  Velocity {dt} s later: {result:.4f} m/s")
+                            print()
+                            continue
+                        case 2:
+                            v_now = _ask('  Current velocity (m/s): ', cast=float)
+                            a     = _ask('  Constant acceleration (m/s²): ', cast=float)
+                            dt    = _ask('  How many seconds BEFORE this moment: ', cast=float)
+                            result = Physics_1D.VelocityBefore(v_now, a, dt)
+                            print(f"\n  Velocity {dt} s earlier: {result:.4f} m/s")
+                            print()
+                            continue
+                        case 3:
+                            v_initial = _ask('  Earlier velocity (m/s): ', cast=float)
+                            v_final   = _ask('  Later velocity (m/s): ', cast=float)
+                            a         = _ask('  Constant acceleration (m/s²): ', cast=float)
+                            result    = Physics_1D.TimeBetweenVelocities(v_initial, v_final, a)
+                            print(f"\n  Time between those velocities: {result:.4f} s")
+                            print()
+                            continue
+                        case 4:
+                            v_ref    = _ask('  Known velocity at reference time (m/s): ', cast=float)
+                            t_ref    = _ask('  Reference time (s): ', cast=float)
+                            a        = _ask('  Constant acceleration (m/s²): ', cast=float)
+                            t_target = _ask('  Target time to find velocity at (s): ', cast=float)
+                            result   = Physics_1D.VelocityAtTime(v_ref, t_ref, a, t_target)
+                            direction = 'earlier' if t_target < t_ref else 'later'
+                            print(f"\n  Velocity at t = {t_target} s ({direction}): {result:.4f} m/s")
+                            print()
+                            continue
+                        case 5:
+                            x_now = _ask('  Current position (m — 0 for relative): ', cast=float)
+                            v_now = _ask('  Current velocity (m/s): ', cast=float)
+                            a     = _ask('  Constant acceleration (m/s²): ', cast=float)
+                            dt    = _ask('  How many seconds BEFORE this moment: ', cast=float)
+                            result = Physics_1D.PositionBefore(x_now, v_now, a, dt)
+                            print(f"\n  Position {dt} s earlier: {result:.4f} m")
+                            print()
+                            continue
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+                elif sec == 4:
+                    match choice:
+                        case 1:
+                            v0    = _ask('  Initial speed (m/s): ', cast=float)
+                            decel = _ask('  Deceleration magnitude (m/s² — positive): ', cast=float)
+                            result = Physics_1D.StoppingTime(v0, decel)
+                            print(f"\n  Time to stop: {result:.4f} s")
+                            print()
+                            continue
+                        case 2:
+                            v0    = _ask('  Initial speed (m/s): ', cast=float)
+                            decel = _ask('  Deceleration magnitude (m/s² — positive): ', cast=float)
+                            result = Physics_1D.StoppingDistance(v0, decel)
+                            print(f"\n  Distance traveled while stopping: {result:.4f} m")
+                            print()
+                            continue
+                        case 3:
+                            v0    = _ask('  Initial speed at start of braking (m/s): ', cast=float)
+                            decel = _ask('  Deceleration magnitude (m/s² — positive): ', cast=float)
+                            t     = _ask('  Time after braking began (s): ', cast=float)
+                            result = Physics_1D.VelocityWhileStopping(v0, decel, t)
+                            print(f"\n  Velocity at t = {t} s during braking: {result:.4f} m/s")
+                            if result == 0:
+                                print('  (Object has already stopped by this time)')
+                            print()
+                            continue
+                        case 4:
+                            v0    = _ask('  Initial speed at start of braking (m/s): ', cast=float)
+                            decel = _ask('  Deceleration magnitude (m/s² — positive): ', cast=float)
+                            t     = _ask('  Time after braking began (s): ', cast=float)
+                            result = Physics_1D.PositionWhileStopping(v0, decel, t)
+                            t_stop = Physics_1D.StoppingTime(v0, decel)
+                            print(f"\n  Position at t = {t} s during braking: {result:.4f} m from braking start")
+                            if t >= t_stop:
+                                print(f"  (Object stopped at t = {t_stop:.4f} s)")
+                            print()
+                            continue
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+                elif sec == 5:
+                    match choice:
+                        case 1:
+                            v_final = _ask('  Impact velocity (m/s): ', cast=float)
+                            g       = _ask('  Gravity (m/s², Enter = 9.8): ', cast=float, default='9.8')
+                            v0      = _ask('  Initial vertical velocity (0 if dropped): ', cast=float, default='0')
+                            result  = Physics_1D.HeightFromFinalVelocity(v_final, float(g), float(v0))
+                            print(f"\n  Height fallen from: {result:.4f} m")
+                            print()
+                            continue
+                        case 2:
+                            v_final = _ask('  Impact velocity (m/s): ', cast=float)
+                            g       = _ask('  Gravity (m/s², Enter = 9.8): ', cast=float, default='9.8')
+                            v0      = _ask('  Initial vertical velocity (0 if dropped): ', cast=float, default='0')
+                            result  = Physics_1D.FreeFallTime(v_final, float(g), float(v0))
+                            print(f"\n  Time spent falling: {result:.4f} s")
+                            print()
+                            continue
+                        case 3:
+                            h  = _ask('  Height of the fall (m): ', cast=float)
+                            g  = _ask('  Gravity (m/s², Enter = 9.8): ', cast=float, default='9.8')
+                            v0 = _ask('  Initial vertical velocity (0 if dropped): ', cast=float, default='0')
+                            result = Physics_1D.ImpactVelocity(h, float(g), float(v0))
+                            print(f"\n  Impact velocity: {result:.4f} m/s")
+                            print()
+                            continue
+                        case 4:
+                            h  = _ask('  Height of the fall (m): ', cast=float)
+                            g  = _ask('  Gravity (m/s², Enter = 9.8): ', cast=float, default='9.8')
+                            v0 = _ask('  Initial downward velocity (0 if dropped from rest): ', cast=float, default='0')
+                            result = Physics_1D.FreeFallTimeFromHeight(h, float(g), float(v0))
+                            print(f"\n  Time to reach the ground: {result:.4f} s")
+                            print()
+                            continue
+                        case 5:
+                            v0 = _ask('  Initial upward launch speed (m/s): ', cast=float)
+                            g  = _ask('  Gravity (m/s², Enter = 9.8): ', cast=float, default='9.8')
+                            result = Physics_1D.MaxHeightFromLaunch(v0, float(g))
+                            print(f"\n  Maximum height reached: {result:.4f} m")
+                            print()
+                            continue
+                        case 6:
+                            v0 = _ask('  Initial upward launch speed (m/s): ', cast=float)
+                            g  = _ask('  Gravity (m/s², Enter = 9.8): ', cast=float, default='9.8')
+                            result = Physics_1D.TimeToMaxHeight(v0, float(g))
+                            print(f"\n  Time to reach peak: {result:.4f} s")
+                            print()
+                            continue
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except (ValueError, TypeError) as e:
+                print(f'\n  Invalid input: {e}  Please try again.')
+                print()
+                continue
             if result is not None:
                 print()
                 print(f"  Result: {result:.6f}")
@@ -954,7 +1099,7 @@ def Physics2DDebug():
         _ExitBar('Return to main menu')
         print()
         try:
-            mode = int(input('  Choose: '))
+            mode = _ask('  Choose: ', cast=int)
         except ValueError:
             continue
         if mode == 0:
@@ -997,7 +1142,7 @@ def Physics2DDebug():
         _ExitBar('Return to main menu')
         print()
         try:
-            sec = int(input('  Select a section: '))
+            sec = _menu_int('  Select a section: ')
         except ValueError:
             continue
         if sec == 0:
@@ -1100,7 +1245,7 @@ def Physics2DDebug():
             _ExitBar('Return to sections')
             print()
             try:
-                choice = int(input('  Select a function: '))
+                choice = _menu_int('  Select a function: ')
             except ValueError:
                 continue
             if choice == 0:
@@ -1119,94 +1264,102 @@ def Physics2DDebug():
                     mode = input('  Choose A or B: ').strip().upper()
                     vals = {}
                     if mode == 'A':
-                        vals['speed'] = float(input('  Launch speed (m/s): '))
-                        vals['angle'] = float(input('  Launch angle above horizontal (degrees): '))
+                        vals['speed'] = _ask('  Launch speed (m/s): ', cast=float)
+                        vals['angle'] = _ask('  Launch angle above horizontal (degrees): ', cast=float)
                         vals['vx0']   = vals['speed'] * math.cos(math.radians(vals['angle']))
                         vals['vy0']   = vals['speed'] * math.sin(math.radians(vals['angle']))
                     else:
-                        vals['vx0']   = float(input('  Horizontal speed vx (m/s): '))
-                        vals['vy0']   = float(input('  Vertical speed vy (m/s, positive = up): '))
+                        vals['vx0']   = _ask('  Horizontal speed vx (m/s): ', cast=float)
+                        vals['vy0']   = _ask('  Vertical speed vy (m/s, positive = up): ', cast=float)
                         vals['speed'] = math.sqrt(vals['vx0']**2 + vals['vy0']**2)
                         vals['angle'] = math.degrees(math.atan2(vals['vy0'], vals['vx0']))
                     vals['mode'] = mode
                     if need_time:
-                        vals['time'] = float(input('  Time (s): '))
+                        vals['time'] = _ask('  Time (s): ', cast=float)
                     if need_y0:
                         raw = input('  Launch height y0 (Enter = 0): ').strip()
                         vals['y0'] = float(raw) if raw else 0.0
                     if need_mass:
-                        vals['mass'] = float(input('  Mass (kg): '))
+                        vals['mass'] = _ask('  Mass (kg): ', cast=float)
                     if need_steps:
                         vals['steps'] = int(input('  Number of steps (Enter = 100): ') or '100')
                     return vals
 
                 result = None
-                match choice:
-                    case 1:
-                        v = _proj_input(need_time=True)
-                        vx, vy = Physics_2D.ProjectileVelocityXY(v['vx0'], v['vy0'], v['time'])
-                        speed  = Physics_2D.ProjectileSpeedXY(v['vx0'], v['vy0'], v['time'])
-                        print()
-                        print(f'  Horizontal speed vx : {vx:.4f} m/s  (unchanged — no air resistance)')
-                        print(f'  Vertical speed   vy : {vy:.4f} m/s  (vy0 − g·t)')
-                        print(f'  Total speed    |v|  : {speed:.4f} m/s')
-                        print()
-                        continue
-                    case 2:
-                        v = _proj_input(need_time=True, need_y0=True)
-                        raw_x0 = input('  Starting x position (Enter = 0): ').strip()
-                        x0 = float(raw_x0) if raw_x0 else 0.0
-                        x, y = Physics_2D.ProjectilePositionXY(v['vx0'], v['vy0'], v['time'], x0, v['y0'])
-                        print()
-                        print(f'  x position : {x:.4f} m')
-                        print(f'  y position : {y:.4f} m')
-                        print()
-                        continue
-                    case 3:
-                        v = _proj_input(need_y0=True)
-                        t_peak, y_max = Physics_2D.ProjectileMaxHeightXY(v['vx0'], v['vy0'], v['y0'])
-                        print()
-                        if v['vy0'] <= 0:
-                            print(f'  No peak — projectile is moving downward or horizontally from the start.')
-                            print(f'  Starting height : {v["y0"]:.4f} m')
-                        else:
-                            print(f'  Time to peak    : {t_peak:.4f} s  (when vy = 0)')
-                            print(f'  Maximum height  : {y_max:.4f} m  (y0 + vy0²/2g)')
-                        print()
-                        continue
-                    case 4:
-                        v = _proj_input(need_y0=True)
-                        t_land = Physics_2D.ProjectileFlightTimeXY(v['vx0'], v['vy0'], v['y0'])
-                        x_land = Physics_2D.ProjectileRangeXY(v['vx0'], v['vy0'], v['y0'])
-                        print()
-                        print(f'  Launch speed    : {v["speed"]:.4f} m/s  at  {v["angle"]:.2f}°')
-                        print(f'  vx = {v["vx0"]:.4f} m/s    vy0 = {v["vy0"]:.4f} m/s')
-                        print(f'  Total flight time : {t_land:.4f} s')
-                        print(f'  Horizontal range  : {x_land:.4f} m')
-                        print()
-                        continue
-                    case 5:
-                        # Air resistance — needs mass; uses angle-form functions
-                        v = _proj_input(need_mass=True, need_steps=True)
-                        raw_t = input('  Total flight time (s): ').strip()
-                        t_total = float(raw_t)
-                        result = Physics_2D.ProjectilePath(
-                            v['speed'], v['angle'], t_total, v['mass'], v['steps'])
-                    case 6:
-                        v = _proj_input(need_steps=True)
-                        raw_t = input('  Total flight time (s): ').strip()
-                        t_total = float(raw_t)
-                        result = Physics_2D.ProjectilePathNoAR(
-                            v['speed'], v['angle'], t_total, v['steps'])
-                    case _:
-                        print('\n  That was not a valid option.')
-                        continue
-                if result is not None:
-                    print()
-                    print(f'  Result: {result}')
+            try:
+                    match choice:
+                        case 1:
+                            v = _proj_input(need_time=True)
+                            vx, vy = Physics_2D.ProjectileVelocityXY(v['vx0'], v['vy0'], v['time'])
+                            speed  = Physics_2D.ProjectileSpeedXY(v['vx0'], v['vy0'], v['time'])
+                            print()
+                            print(f'  Horizontal speed vx : {vx:.4f} m/s  (unchanged — no air resistance)')
+                            print(f'  Vertical speed   vy : {vy:.4f} m/s  (vy0 − g·t)')
+                            print(f'  Total speed    |v|  : {speed:.4f} m/s')
+                            print()
+                            continue
+                        case 2:
+                            v = _proj_input(need_time=True, need_y0=True)
+                            raw_x0 = input('  Starting x position (Enter = 0): ').strip()
+                            x0 = float(raw_x0) if raw_x0 else 0.0
+                            x, y = Physics_2D.ProjectilePositionXY(v['vx0'], v['vy0'], v['time'], x0, v['y0'])
+                            print()
+                            print(f'  x position : {x:.4f} m')
+                            print(f'  y position : {y:.4f} m')
+                            print()
+                            continue
+                        case 3:
+                            v = _proj_input(need_y0=True)
+                            t_peak, y_max = Physics_2D.ProjectileMaxHeightXY(v['vx0'], v['vy0'], v['y0'])
+                            print()
+                            if v['vy0'] <= 0:
+                                print(f'  No peak — projectile is moving downward or horizontally from the start.')
+                                print(f'  Starting height : {v["y0"]:.4f} m')
+                            else:
+                                print(f'  Time to peak    : {t_peak:.4f} s  (when vy = 0)')
+                                print(f'  Maximum height  : {y_max:.4f} m  (y0 + vy0²/2g)')
+                            print()
+                            continue
+                        case 4:
+                            v = _proj_input(need_y0=True)
+                            t_land = Physics_2D.ProjectileFlightTimeXY(v['vx0'], v['vy0'], v['y0'])
+                            x_land = Physics_2D.ProjectileRangeXY(v['vx0'], v['vy0'], v['y0'])
+                            print()
+                            print(f'  Launch speed    : {v["speed"]:.4f} m/s  at  {v["angle"]:.2f}°')
+                            print(f'  vx = {v["vx0"]:.4f} m/s    vy0 = {v["vy0"]:.4f} m/s')
+                            print(f'  Total flight time : {t_land:.4f} s')
+                            print(f'  Horizontal range  : {x_land:.4f} m')
+                            print()
+                            continue
+                        case 5:
+                            # Air resistance — needs mass; uses angle-form functions
+                            v = _proj_input(need_mass=True, need_steps=True)
+                            raw_t = input('  Total flight time (s): ').strip()
+                            t_total = float(raw_t)
+                            result = Physics_2D.ProjectilePath(
+                                v['speed'], v['angle'], t_total, v['mass'], v['steps'])
+                        case 6:
+                            v = _proj_input(need_steps=True)
+                            raw_t = input('  Total flight time (s): ').strip()
+                            t_total = float(raw_t)
+                            result = Physics_2D.ProjectilePathNoAR(
+                                v['speed'], v['angle'], t_total, v['steps'])
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+            except _AskAbort:
                 print()
-
-            elif sec == 2:
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except (ValueError, TypeError) as e:
+                print(f'\n  Invalid input: {e}  Please try again.')
+                print()
+                continue
+            if result is not None:
+                print()
+                print(f'  Result: {result}')
+                print()
                 # Path resultant — in stored mode let user pick vectors as segments
                 if stored is not None and stored:
                     print()
@@ -1278,9 +1431,9 @@ def Physics2DDebug():
             elif sec == 1:
                 # Horizontal projectile — always direct input
                 print()
-                h  = float(input('  Launch height above ground (m): '))
+                h  = _ask('  Launch height above ground (m): ', cast=float)
                 if choice in (2, 4, 5):
-                    vx = float(input('  Horizontal launch speed (m/s): '))
+                    vx = _ask('  Horizontal launch speed (m/s): ', cast=float)
                 raw_g = input('  Gravity (m/s²)  [Enter for 9.8]: ').strip()
                 g  = float(raw_g) if raw_g else 9.8
                 print()
@@ -1400,7 +1553,7 @@ def Physics2DDebug():
                     print(f'    F{i} = {fx}i  +  {fy}j  N')
                 print()
                 if choice in (2, 3):
-                    mass = float(input('  Mass (kg): '))
+                    mass = _ask('  Mass (kg): ', cast=float)
                     print()
                 match choice:
                     case 1:
@@ -1431,7 +1584,7 @@ def Physics2DDebug():
                 print()
                 match choice:
                     case 1:
-                        weight = float(input('  Object weight  (N, positive = downward): '))
+                        weight = _ask('  Object weight  (N, positive = downward): ', cast=float)
                         print('  Enter each upward force magnitude. Leave blank when done.')
                         up_forces = []
                         n = 1
@@ -1506,9 +1659,9 @@ def Physics2DDebug():
                 match choice:
                     case 1:
                         # Flat surface, horizontal push
-                        mass = float(input('  Mass (kg): '))
-                        mu   = float(input('  Coefficient of kinetic friction (μk): '))
-                        F    = float(input('  Applied horizontal force (N): '))
+                        mass = _ask('  Mass (kg): ', cast=float)
+                        mu   = _ask('  Coefficient of kinetic friction (μk): ', cast=float)
+                        F    = _ask('  Applied horizontal force (N): ', cast=float)
                         g    = 9.8
                         N    = Forces.NormalForce(mass, g)
                         Ff   = Forces.FrictionForce(mu, N)
@@ -1520,10 +1673,10 @@ def Physics2DDebug():
                         print(f'  Acceleration   a  : {a:.4f} m/s²')
                     case 2:
                         # Off-axis push (force angled below horizontal)
-                        mass  = float(input('  Mass (kg): '))
-                        mu    = float(input('  Coefficient of kinetic friction (μk): '))
-                        F     = float(input('  Applied force magnitude (N): '))
-                        theta = float(input('  Angle below horizontal (degrees): '))
+                        mass  = _ask('  Mass (kg): ', cast=float)
+                        mu    = _ask('  Coefficient of kinetic friction (μk): ', cast=float)
+                        F     = _ask('  Applied force magnitude (N): ', cast=float)
+                        theta = _ask('  Angle below horizontal (degrees): ', cast=float)
                         N     = Forces.NormalForceOffAxis(mass, F, theta)
                         Ff    = Forces.FrictionForceOffAxis(mass, mu, F, theta)
                         a     = Forces.AccelerationOffAxis(mass, mu, F, theta)
@@ -1536,8 +1689,8 @@ def Physics2DDebug():
                         print(f'  Acceleration   a  : {a:.4f} m/s²')
                     case 3:
                         # Incline — normal force and tension/parallel gravity
-                        mass  = float(input('  Mass (kg): '))
-                        theta = float(input('  Incline angle (degrees): '))
+                        mass  = _ask('  Mass (kg): ', cast=float)
+                        theta = _ask('  Incline angle (degrees): ', cast=float)
                         N     = Forces.NormalForceIncline(mass, theta)
                         T     = Forces.FrictionForceIncline(mass, theta)
                         print()
@@ -1545,8 +1698,8 @@ def Physics2DDebug():
                         print(f'  Parallel comp T = mg·sinθ : {T:.4f} N  (down the slope / tension needed)')
                     case 4:
                         # Minimum force to overcome static friction
-                        mass = float(input('  Mass (kg): '))
-                        mu_s = float(input('  Coefficient of static friction (μs): '))
+                        mass = _ask('  Mass (kg): ', cast=float)
+                        mu_s = _ask('  Coefficient of static friction (μs): ', cast=float)
                         N       = Forces.NormalForce(mass)
                         F_min   = Forces.FrictionForce(mu_s, N)
                         print()
@@ -1555,10 +1708,10 @@ def Physics2DDebug():
                         print(f'  Any force > {F_min:.4f} N will start motion')
                     case 5:
                         # Final speed after distance — flat surface
-                        mass = float(input('  Mass (kg): '))
-                        mu   = float(input('  Coefficient of kinetic friction (μk): '))
-                        F    = float(input('  Applied horizontal force (N): '))
-                        d    = float(input('  Distance (m): '))
+                        mass = _ask('  Mass (kg): ', cast=float)
+                        mu   = _ask('  Coefficient of kinetic friction (μk): ', cast=float)
+                        F    = _ask('  Applied horizontal force (N): ', cast=float)
+                        d    = _ask('  Distance (m): ', cast=float)
                         raw_u = input('  Initial speed (m/s)  [Enter = 0, starting from rest]: ').strip()
                         u    = float(raw_u) if raw_u else 0.0
                         v, a, Ff, N = Forces.FinalSpeedFlatFriction(mass, mu, F, d, u)
@@ -1584,15 +1737,15 @@ def Physics2DDebug():
                 print()
                 match choice:
                     case 1:
-                        mass = float(input('  Mass (kg): '))
+                        mass = _ask('  Mass (kg): ', cast=float)
                         T, W, F_net = Forces.TensionHanging(mass)
                         print()
                         print(f'  Object weight  W     : {W:.4f} N  ↓')
                         print(f'  Rope tension   T     : {T:.4f} N  ↑  (equals weight — at rest)')
                         print(f'  Net force on object  : {F_net:.4f} N  (zero — equilibrium)')
                     case 2:
-                        mass = float(input('  Mass (kg): '))
-                        a    = float(input('  Acceleration (m/s²)  [positive=up, negative=down]: '))
+                        mass = _ask('  Mass (kg): ', cast=float)
+                        a    = _ask('  Acceleration (m/s²)  [positive=up, negative=down]: ', cast=float)
                         T, W, F_net = Forces.TensionAccelerating(mass, a)
                         print()
                         print(f'  Object weight  W     : {W:.4f} N  ↓')
@@ -1605,8 +1758,8 @@ def Physics2DDebug():
                         else:
                             print('  → Tension equals weight  (constant velocity)')
                     case 3:
-                        mass  = float(input('  Mass (kg): '))
-                        theta = float(input('  Angle from vertical (degrees): '))
+                        mass  = _ask('  Mass (kg): ', cast=float)
+                        theta = _ask('  Angle from vertical (degrees): ', cast=float)
                         T, T_x, T_y, W = Forces.TensionAtAngle(mass, theta)
                         print()
                         print(f'  Object weight  W     : {W:.4f} N  ↓')
@@ -1614,8 +1767,8 @@ def Physics2DDebug():
                         print(f'  Horizontal component : {T_x:.4f} N  →  (T·sinθ)')
                         print(f'  Vertical component   : {T_y:.4f} N  ↑  (T·cosθ = W)')
                     case 4:
-                        m1 = float(input('  Mass 1 (kg): '))
-                        m2 = float(input('  Mass 2 (kg): '))
+                        m1 = _ask('  Mass 1 (kg): ', cast=float)
+                        m2 = _ask('  Mass 2 (kg): ', cast=float)
                         T, W1, W2, a, F_net1, F_net2 = Forces.TensionAtwood(m1, m2)
                         print()
                         print(f'  Mass 1 weight  W1    : {W1:.4f} N  ↓')
@@ -1631,8 +1784,8 @@ def Physics2DDebug():
                         else:
                             print('  → System in equilibrium  (equal masses)')
                     case 5:
-                        m1 = float(input('  Mass 1 (kg): '))
-                        m2 = float(input('  Mass 2 (kg): '))
+                        m1 = _ask('  Mass 1 (kg): ', cast=float)
+                        m2 = _ask('  Mass 2 (kg): ', cast=float)
                         a, T, W1, W2, F_net1, F_net2 = Forces.AtwoodAcceleration(m1, m2)
                         print()
                         print(f'  Mass 1 weight  W1    : {W1:.4f} N  ↓')
@@ -1657,9 +1810,9 @@ def Physics2DDebug():
                 print()
                 match choice:
                     case 1:
-                        mass = float(input('  Mass (kg): '))
-                        v    = float(input('  Speed (m/s): '))
-                        r    = float(input('  Radius (m): '))
+                        mass = _ask('  Mass (kg): ', cast=float)
+                        v    = _ask('  Speed (m/s): ', cast=float)
+                        r    = _ask('  Radius (m): ', cast=float)
                         Fc   = Forces.CentripetalForce(mass, v, r)
                         ac   = Forces.CentripetalAcceleration(v, r)
                         T    = Forces.CircularPeriod(r, v)
@@ -1668,8 +1821,8 @@ def Physics2DDebug():
                         print(f'  Centripetal accel   ac : {ac:.4f} m/s²')
                         print(f'  Period               T : {T:.4f} s  (time for one full circle)')
                     case 2:
-                        mu = float(input('  Coefficient of friction (μ): '))
-                        r  = float(input('  Radius (m): '))
+                        mu = _ask('  Coefficient of friction (μ): ', cast=float)
+                        r  = _ask('  Radius (m): ', cast=float)
                         v_max = Forces.MaxCircularSpeedFromFriction(mu, r)
                         mass  = input('  Mass (kg) [optional — press Enter to skip]: ').strip()
                         print()
@@ -1686,20 +1839,20 @@ def Physics2DDebug():
                             print(f'    Max friction   Ff : {Ff:.4f} N  (= μN = centripetal force)')
                             print(f'    Centripetal Fc    : {Fc:.4f} N  (confirms Ff = Fc at v_max)')
                     case 3:
-                        v = float(input('  Speed (m/s): '))
-                        r = float(input('  Radius (m): '))
+                        v = _ask('  Speed (m/s): ', cast=float)
+                        r = _ask('  Radius (m): ', cast=float)
                         ac = Forces.CentripetalAcceleration(v, r)
                         print()
                         print(f'  Centripetal acceleration : {ac:.4f} m/s²  (ac = v²/r, directed inward)')
                     case 4:
-                        r = float(input('  Radius (m): '))
-                        v = float(input('  Speed (m/s): '))
+                        r = _ask('  Radius (m): ', cast=float)
+                        v = _ask('  Speed (m/s): ', cast=float)
                         T = Forces.CircularPeriod(r, v)
                         print()
                         print(f'  Period  T = 2πr/v : {T:.4f} s  (time for one complete revolution)')
                     case 5:
-                        r = float(input('  Radius (m): '))
-                        v = float(input('  Speed (m/s): '))
+                        r = _ask('  Radius (m): ', cast=float)
+                        v = _ask('  Speed (m/s): ', cast=float)
                         f = Forces.CircularFrequency(v, r)
                         print()
                         print(f'  Frequency  f = v/(2πr) : {f:.4f} Hz  (revolutions per second)')
@@ -1714,53 +1867,53 @@ def Physics2DDebug():
                 print()
                 match choice:
                     case 1:
-                        m1 = float(input('  Mass 1 (kg): '))
-                        m2 = float(input('  Mass 2 (kg): '))
-                        r  = float(input('  Distance between centres (m): '))
+                        m1 = _ask('  Mass 1 (kg): ', cast=float)
+                        m2 = _ask('  Mass 2 (kg): ', cast=float)
+                        r  = _ask('  Distance between centres (m): ', cast=float)
                         F  = Forces.GravitationalForce(m1, m2, r)
                         print()
                         print(f'  Gravitational force : {F:.4e} N  (F = G·m1·m2/r²)')
                         print(f'  Acts equally on both bodies — attractive, along the line joining them')
                     case 2:
-                        M = float(input('  Mass of large body (kg): '))
-                        r = float(input('  Distance from centre (m): '))
+                        M = _ask('  Mass of large body (kg): ', cast=float)
+                        r = _ask('  Distance from centre (m): ', cast=float)
                         g = Forces.GravitationalFieldStrength(M, r)
                         print()
                         print(f'  Field strength : {g:.4e} m/s²  (g = G·M/r²)')
                         print(f'  This is also the free-fall acceleration at that distance')
                     case 3:
-                        M        = float(input('  Mass of large body (kg): '))
-                        g_target = float(input('  Target field strength (m/s²): '))
+                        M        = _ask('  Mass of large body (kg): ', cast=float)
+                        g_target = _ask('  Target field strength (m/s²): ', cast=float)
                         r = Forces.GravitationalFieldRadius(M, g_target)
                         print()
                         print(f'  Distance from centre : {r:.4e} m  (r = sqrt(G·M/g))')
                     case 4:
-                        M = float(input('  Mass of large body (kg): '))
-                        r = float(input('  Orbital radius — centre to orbit (m): '))
+                        M = _ask('  Mass of large body (kg): ', cast=float)
+                        r = _ask('  Orbital radius — centre to orbit (m): ', cast=float)
                         v = Forces.OrbitalSpeed(M, r)
                         T = Forces.OrbitalPeriod(M, r)
                         print()
                         print(f'  Orbital speed  v : {v:.4e} m/s  (v = sqrt(G·M/r))')
                         print(f'  Orbital period T : {T:.4e} s   (T = 2π·sqrt(r³/GM))')
                     case 5:
-                        M = float(input('  Mass of large body (kg): '))
-                        r = float(input('  Orbital radius — centre to orbit (m): '))
+                        M = _ask('  Mass of large body (kg): ', cast=float)
+                        r = _ask('  Orbital radius — centre to orbit (m): ', cast=float)
                         T = Forces.OrbitalPeriod(M, r)
                         v = Forces.OrbitalSpeed(M, r)
                         print()
                         print(f'  Orbital period T : {T:.4e} s   (T = 2π·sqrt(r³/GM))')
                         print(f'  Orbital speed  v : {v:.4e} m/s  (v = sqrt(G·M/r))')
                     case 6:
-                        m1 = float(input('  Mass 1 (kg): '))
-                        m2 = float(input('  Mass 2 (kg): '))
-                        r  = float(input('  Distance between centres (m): '))
+                        m1 = _ask('  Mass 1 (kg): ', cast=float)
+                        m2 = _ask('  Mass 2 (kg): ', cast=float)
+                        r  = _ask('  Distance between centres (m): ', cast=float)
                         U  = Forces.GravitationalPotentialEnergy(m1, m2, r)
                         print()
                         print(f'  Gravitational PE : {U:.4e} J  (U = −G·m1·m2/r)')
                         print(f'  Negative — energy needed to separate the bodies to infinity')
                     case 7:
-                        M = float(input('  Mass of large body (kg): '))
-                        r = float(input('  Distance from centre (m): '))
+                        M = _ask('  Mass of large body (kg): ', cast=float)
+                        r = _ask('  Distance from centre (m): ', cast=float)
                         v = Forces.EscapeVelocity(M, r)
                         print()
                         print(f'  Escape velocity : {v:.4e} m/s  (v = sqrt(2·G·M/r))')
@@ -1780,7 +1933,7 @@ def Physics3DDebug():
         _ExitBar('Return to main menu')
         print()
         try:
-            mode = int(input('  Choose: '))
+            mode = _ask('  Choose: ', cast=int)
         except ValueError:
             continue
         if mode == 0:
@@ -1816,7 +1969,7 @@ def Physics3DDebug():
         _ExitBar('Return to main menu')
         print()
         try:
-            sec = int(input('  Select a section: '))
+            sec = _menu_int('  Select a section: ')
         except ValueError:
             continue
         if sec == 0:
@@ -1863,7 +2016,7 @@ def Physics3DDebug():
             _ExitBar('Return to sections')
             print()
             try:
-                choice = int(input('  Select a function: '))
+                choice = _menu_int('  Select a function: ')
             except ValueError:
                 continue
             if choice == 0:
@@ -1871,79 +2024,87 @@ def Physics3DDebug():
 
             if sec == 1:
                 result = None
-                match choice:
-                    case 1:
-                        result = Physics_3D.ProjectileVelocity(
-                            float(input('  Launch speed (m/s): ')), float(input('  Launch angle (degrees): ')),
-                            float(input('  Time in flight (s): ')), float(input('  Mass (kg): ')))
-                    case 2:
-                        result = Physics_3D.ProjectilePosition(
-                            float(input('  Launch speed (m/s): ')), float(input('  Launch angle (degrees): ')),
-                            float(input('  Time in flight (s): ')), float(input('  Mass (kg): ')))
-                    case 3:
-                        result = Physics_3D.ProjectileRange(
-                            float(input('  Launch speed (m/s): ')), float(input('  Launch angle (degrees): ')),
-                            float(input('  Total flight time (s): ')), float(input('  Mass (kg): ')))
-                    case 4:
-                        result = Physics_3D.ProjectileMaxHeight(
-                            float(input('  Launch speed (m/s): ')), float(input('  Launch angle (degrees): ')),
-                            float(input('  Mass (kg): ')))
-                    case 5:
-                        result = Physics_3D.DragForce(
-                            float(input('  Mass (kg): ')), float(input('  vx (m/s): ')), float(input('  vy (m/s): ')))
-                    case 6:
-                        result = Physics_3D.ProjectilePath(
-                            float(input('  Launch speed (m/s): ')), float(input('  Launch angle (degrees): ')),
-                            float(input('  Total flight time (s): ')), float(input('  Mass (kg): ')),
-                            int(input('  Number of steps: ')))
-                    case 7:
-                        result = Physics_3D.ProjectilePathNoAR(
-                            float(input('  Launch speed (m/s): ')), float(input('  Launch angle (degrees): ')),
-                            float(input('  Total flight time (s): ')), int(input('  Number of steps: ')))
-                    case _:
-                        print('\n  That was not a valid option.')
-                        continue
-                if result is not None:
-                    print()
-                    print(f'  Result: {result}')
+            try:
+                    match choice:
+                        case 1:
+                            result = Physics_3D.ProjectileVelocity(
+                                _ask('  Launch speed (m/s): ', cast=float), _ask('  Launch angle (degrees): ', cast=float),
+                                _ask('  Time in flight (s): ', cast=float), _ask('  Mass (kg): ', cast=float))
+                        case 2:
+                            result = Physics_3D.ProjectilePosition(
+                                _ask('  Launch speed (m/s): ', cast=float), _ask('  Launch angle (degrees): ', cast=float),
+                                _ask('  Time in flight (s): ', cast=float), _ask('  Mass (kg): ', cast=float))
+                        case 3:
+                            result = Physics_3D.ProjectileRange(
+                                _ask('  Launch speed (m/s): ', cast=float), _ask('  Launch angle (degrees): ', cast=float),
+                                _ask('  Total flight time (s): ', cast=float), _ask('  Mass (kg): ', cast=float))
+                        case 4:
+                            result = Physics_3D.ProjectileMaxHeight(
+                                _ask('  Launch speed (m/s): ', cast=float), _ask('  Launch angle (degrees): ', cast=float),
+                                _ask('  Mass (kg): ', cast=float))
+                        case 5:
+                            result = Physics_3D.DragForce(
+                                _ask('  Mass (kg): ', cast=float), _ask('  vx (m/s): ', cast=float), _ask('  vy (m/s): ', cast=float))
+                        case 6:
+                            result = Physics_3D.ProjectilePath(
+                                _ask('  Launch speed (m/s): ', cast=float), _ask('  Launch angle (degrees): ', cast=float),
+                                _ask('  Total flight time (s): ', cast=float), _ask('  Mass (kg): ', cast=float),
+                                _ask('  Number of steps: ', cast=int))
+                        case 7:
+                            result = Physics_3D.ProjectilePathNoAR(
+                                _ask('  Launch speed (m/s): ', cast=float), _ask('  Launch angle (degrees): ', cast=float),
+                                _ask('  Total flight time (s): ', cast=float), _ask('  Number of steps: ', cast=int))
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+            except _AskAbort:
                 print()
-
-            elif sec == 2:
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except (ValueError, TypeError) as e:
+                print(f'\n  Invalid input: {e}  Please try again.')
+                print()
+                continue
+            if result is not None:
+                print()
+                print(f'  Result: {result}')
+                print()
                 # Displacement & position — all component form
                 print()
                 match choice:
                     case 1:
                         print('  Enter the INITIAL position vector  (r_i):')
-                        rix = float(input('    r_ix  (i): '))
-                        riy = float(input('    r_iy  (j): '))
-                        riz = float(input('    r_iz  (k): '))
+                        rix = _ask('    r_ix  (i): ', cast=float)
+                        riy = _ask('    r_iy  (j): ', cast=float)
+                        riz = _ask('    r_iz  (k): ', cast=float)
                         print('  Enter the FINAL position vector  (r_f):')
-                        rfx = float(input('    r_fx  (i): '))
-                        rfy = float(input('    r_fy  (j): '))
-                        rfz = float(input('    r_fz  (k): '))
+                        rfx = _ask('    r_fx  (i): ', cast=float)
+                        rfy = _ask('    r_fy  (j): ', cast=float)
+                        rfz = _ask('    r_fz  (k): ', cast=float)
                         drx, dry, drz = Physics_3D.DisplacementXYZ(rix, riy, riz, rfx, rfy, rfz)
                         print(f'\n  Δr⃗  =  r⃗_f − r⃗_i  =  {drx:.4f}i  +  {dry:.4f}j  +  {drz:.4f}k')
                         print(f'  |Δr⃗|  =  {Physics_3D.MagnitudeXYZ(drx, dry, drz):.4f} m')
                     case 2:
                         print('  Enter the INITIAL position vector  (r_i):')
-                        rix = float(input('    r_ix  (i): '))
-                        riy = float(input('    r_iy  (j): '))
-                        riz = float(input('    r_iz  (k): '))
+                        rix = _ask('    r_ix  (i): ', cast=float)
+                        riy = _ask('    r_iy  (j): ', cast=float)
+                        riz = _ask('    r_iz  (k): ', cast=float)
                         print('  Enter the DISPLACEMENT vector  (Δr):')
-                        drx = float(input('    Δrx  (i): '))
-                        dry = float(input('    Δry  (j): '))
-                        drz = float(input('    Δrz  (k): '))
+                        drx = _ask('    Δrx  (i): ', cast=float)
+                        dry = _ask('    Δry  (j): ', cast=float)
+                        drz = _ask('    Δrz  (k): ', cast=float)
                         rfx, rfy, rfz = Physics_3D.FinalPositionXYZ(rix, riy, riz, drx, dry, drz)
                         print(f'\n  r⃗_f  =  r⃗_i + Δr⃗  =  {rfx:.4f}i  +  {rfy:.4f}j  +  {rfz:.4f}k')
                     case 3:
                         print('  Enter the FINAL position vector  (r_f):')
-                        rfx = float(input('    r_fx  (i): '))
-                        rfy = float(input('    r_fy  (j): '))
-                        rfz = float(input('    r_fz  (k): '))
+                        rfx = _ask('    r_fx  (i): ', cast=float)
+                        rfy = _ask('    r_fy  (j): ', cast=float)
+                        rfz = _ask('    r_fz  (k): ', cast=float)
                         print('  Enter the DISPLACEMENT vector  (Δr):')
-                        drx = float(input('    Δrx  (i): '))
-                        dry = float(input('    Δry  (j): '))
-                        drz = float(input('    Δrz  (k): '))
+                        drx = _ask('    Δrx  (i): ', cast=float)
+                        dry = _ask('    Δry  (j): ', cast=float)
+                        drz = _ask('    Δrz  (k): ', cast=float)
                         rix, riy, riz = Physics_3D.InitialPositionXYZ(rfx, rfy, rfz, drx, dry, drz)
                         print(f'\n  r⃗_i  =  r⃗_f − Δr⃗  =  {rix:.4f}i  +  {riy:.4f}j  +  {riz:.4f}k')
                     case _:
@@ -1978,7 +2139,7 @@ def Physics3DDebug():
                     print(f'    F{i} = {fx}i  +  {fy}j  +  {fz}k  N')
                 print()
                 if choice in (2, 3):
-                    mass = float(input('  Mass (kg): '))
+                    mass = _ask('  Mass (kg): ', cast=float)
                     print()
                 match choice:
                     case 1:
@@ -2012,10 +2173,10 @@ def Forces2DDebug():
     _SectionHeader('Forces 2D', 'Step 1 of 3 — Describe the object')
     print('  Enter the properties of the object the forces will act on.')
     print()
-    mass     = float(input('  Mass of the object (kg): '))
-    g        = float(input('  Gravity (m/s², Enter = 9.8): ') or '9.8')
-    velocity = float(input('  Current velocity (m/s): '))
-    height   = float(input('  Current height above ground (m): '))
+    mass     = _ask('  Mass of the object (kg): ', cast=float)
+    g        = _ask('  Gravity (m/s², Enter = 9.8): ', cast=float)
+    velocity = _ask('  Current velocity (m/s): ', cast=float)
+    height   = _ask('  Current height above ground (m): ', cast=float)
     obj          = Forces.Forces2D(mass, float(g))
     obj.velocity = velocity
     obj.height   = height
@@ -2026,8 +2187,8 @@ def Forces2DDebug():
     print('  (1)  Yes — set the incline angle')
     print('  (2)  No — flat surface')
     print()
-    if int(input('  Enter a number to choose: ')) == 1:
-        angle = float(input('  Incline angle (degrees): '))
+    if _ask('  Enter a number to choose: ', cast=int) == 1:
+        angle = _ask('  Incline angle (degrees): ', cast=float)
         obj.SetIncline(angle)
         print()
         print(f"  Incline set to {angle}° — normal force updated to {obj.normal:.3f} N")
@@ -2038,7 +2199,7 @@ def Forces2DDebug():
     print('  (2)  No — I will manage forces manually')
     print()
     force_count = 0
-    if int(input('  Enter a number to choose: ')) == 1:
+    if _ask('  Enter a number to choose: ', cast=int) == 1:
         obj.ApplyGravity()
         force_count = 1
         print()
@@ -2051,11 +2212,11 @@ def Forces2DDebug():
         print('  (2)  By total strength and direction angle')
         print('  (3)  Done adding forces')
         print()
-        fc = int(input('  Enter a number to choose: '))
+        fc = _ask('  Enter a number to choose: ', cast=int)
         match fc:
             case 1:
-                x     = float(input('  Force X (N, negative = left): '))
-                y     = float(input('  Force Y (N, negative = down): '))
+                x     = _ask('  Force X (N, negative = left): ', cast=float)
+                y     = _ask('  Force Y (N, negative = down): ', cast=float)
                 force = Forces.Force2D(x, y)
                 obj.forces.append(force)
                 force_count += 1
@@ -2063,8 +2224,8 @@ def Forces2DDebug():
                 print(f"  Added — {force.magnitude:.3f} N at {force.angle:.1f}°")
                 print()
             case 2:
-                magnitude = float(input('  Total strength (N): '))
-                angle     = float(input('  Direction (degrees, 0 = right): '))
+                magnitude = _ask('  Total strength (N): ', cast=float)
+                angle     = _ask('  Direction (degrees, 0 = right): ', cast=float)
                 force     = Forces.Force2D(0, 0, angle, magnitude)
                 obj.forces.append(force)
                 force_count += 1
@@ -2090,7 +2251,7 @@ def Forces2DDebug():
         print()
         _ExitBar('Return to main menu')
         print()
-        sec = int(input('  Select a section: '))
+        sec = _menu_int('  Select a section: ')
         if sec == 0: return
         if sec < 1 or sec > len(QUERY_SECTIONS):
             print('\n  That was not a valid section.')
@@ -2117,7 +2278,7 @@ def Forces2DDebug():
             print()
             _ExitBar('Return to sections')
             print()
-            query = int(input('  Select a query: '))
+            query = _ask('  Select a query: ', cast=int)
             if query == 0: break
             if sec == 1:
                 match query:
@@ -2139,13 +2300,13 @@ def Forces2DDebug():
                         print(f"  Total Mechanical Energy: {result:.3f} J")
                     case 5:
                         print()
-                        time   = float(input('  Over how many seconds? '))
+                        time   = _ask('  Over how many seconds? ', cast=float)
                         result = obj.NetImpulse(time)
                         print()
                         print(f"  Impulse over {time}s: {result:.3f} N·s")
                     case 6:
                         print()
-                        time = float(input('  Advance by how many seconds? '))
+                        time = _ask('  Advance by how many seconds? ', cast=float)
                         obj.UpdateVelocity(time)
                         print()
                         print(f"  Velocity is now: {obj.velocity:.3f} m/s")
@@ -2189,9 +2350,9 @@ def Forces2DDebug():
                         print('\n  That was not a valid option.')
                         continue
             elif sec == 3:
-                area             = float(input('  Cross-sectional area (m²): '))
-                drag_coefficient = float(input('  Drag coefficient (e.g. 0.47 for a sphere): '))
-                fluid_density    = float(input('  Fluid density (kg/m³, Enter = 1.225): ') or '1.225')
+                area             = _ask('  Cross-sectional area (m²): ', cast=float)
+                drag_coefficient = _ask('  Drag coefficient (e.g. 0.47 for a sphere): ', cast=float)
+                fluid_density    = _ask('  Fluid density (kg/m³, Enter = 1.225): ', cast=float)
                 match query:
                     case 1:
                         result = Forces.TerminalVelocity(obj.mass, area, drag_coefficient, float(fluid_density), obj.g)
@@ -2222,10 +2383,10 @@ def Forces3DDebug():
     _SectionHeader('Forces 3D', 'Step 1 of 3 — Describe the object')
     print('  Enter the properties of the object the forces will act on.')
     print()
-    mass     = float(input('  Mass of the object (kg): '))
-    g        = float(input('  Gravity (m/s², Enter = 9.8): ') or '9.8')
-    velocity = float(input('  Current velocity (m/s): '))
-    height   = float(input('  Current height above ground (m): '))
+    mass     = _ask('  Mass of the object (kg): ', cast=float)
+    g        = _ask('  Gravity (m/s², Enter = 9.8): ', cast=float)
+    velocity = _ask('  Current velocity (m/s): ', cast=float)
+    height   = _ask('  Current height above ground (m): ', cast=float)
     obj          = Forces.Forces3D(mass, float(g))
     obj.velocity = velocity
     obj.height   = height
@@ -2236,8 +2397,8 @@ def Forces3DDebug():
     print('  (1)  Yes — set the incline angle')
     print('  (2)  No — flat surface')
     print()
-    if int(input('  Enter a number to choose: ')) == 1:
-        angle = float(input('  Incline angle (degrees): '))
+    if _ask('  Enter a number to choose: ', cast=int) == 1:
+        angle = _ask('  Incline angle (degrees): ', cast=float)
         obj.SetIncline(angle)
         print()
         print(f"  Incline set to {angle}° — normal force updated to {obj.normal:.3f} N")
@@ -2248,7 +2409,7 @@ def Forces3DDebug():
     print('  (2)  No — I will manage forces manually')
     print()
     force_count = 0
-    if int(input('  Enter a number to choose: ')) == 1:
+    if _ask('  Enter a number to choose: ', cast=int) == 1:
         obj.ApplyGravity()
         force_count = 1
         print()
@@ -2261,12 +2422,12 @@ def Forces3DDebug():
         print('  (2)  By total strength, horizontal angle, vertical angle')
         print('  (3)  Done adding forces')
         print()
-        fc = int(input('  Enter a number to choose: '))
+        fc = _ask('  Enter a number to choose: ', cast=int)
         match fc:
             case 1:
-                x     = float(input('  Force X (N): '))
-                y     = float(input('  Force Y (N): '))
-                z     = float(input('  Force Z (N): '))
+                x     = _ask('  Force X (N): ', cast=float)
+                y     = _ask('  Force Y (N): ', cast=float)
+                z     = _ask('  Force Z (N): ', cast=float)
                 force = Forces.Force3D(x, y, z)
                 obj.forces.append(force)
                 force_count += 1
@@ -2274,9 +2435,9 @@ def Forces3DDebug():
                 print(f"  Added — {force.magnitude:.3f} N, angle {force.angle:.1f}°, phi {force.phi:.1f}°")
                 print()
             case 2:
-                magnitude = float(input('  Total strength (N): '))
-                angle     = float(input('  Horizontal direction (degrees, 0 = forward): '))
-                phi       = float(input('  Vertical angle (degrees, 0 = flat, 90 = up): '))
+                magnitude = _ask('  Total strength (N): ', cast=float)
+                angle     = _ask('  Horizontal direction (degrees, 0 = forward): ', cast=float)
+                phi       = _ask('  Vertical angle (degrees, 0 = flat, 90 = up): ', cast=float)
                 force     = Forces.Force3D(0, 0, 0, angle, phi, magnitude)
                 obj.forces.append(force)
                 force_count += 1
@@ -2302,7 +2463,7 @@ def Forces3DDebug():
         print()
         _ExitBar('Return to main menu')
         print()
-        sec = int(input('  Select a section: '))
+        sec = _menu_int('  Select a section: ')
         if sec == 0: return
         if sec < 1 or sec > len(QUERY_SECTIONS):
             print('\n  That was not a valid section.')
@@ -2329,7 +2490,7 @@ def Forces3DDebug():
             print()
             _ExitBar('Return to sections')
             print()
-            query = int(input('  Select a query: '))
+            query = _ask('  Select a query: ', cast=int)
             if query == 0: break
             if sec == 1:
                 match query:
@@ -2351,13 +2512,13 @@ def Forces3DDebug():
                         print(f"  Total Mechanical Energy: {result:.3f} J")
                     case 5:
                         print()
-                        time   = float(input('  Over how many seconds? '))
+                        time   = _ask('  Over how many seconds? ', cast=float)
                         result = obj.NetImpulse(time)
                         print()
                         print(f"  Impulse over {time}s: {result:.3f} N·s")
                     case 6:
                         print()
-                        time = float(input('  Advance by how many seconds? '))
+                        time = _ask('  Advance by how many seconds? ', cast=float)
                         obj.UpdateVelocity(time)
                         print()
                         print(f"  Velocity is now: {obj.velocity:.3f} m/s")
@@ -2403,9 +2564,9 @@ def Forces3DDebug():
                         print('\n  That was not a valid option.')
                         continue
             elif sec == 3:
-                area             = float(input('  Cross-sectional area (m²): '))
-                drag_coefficient = float(input('  Drag coefficient (e.g. 0.47 for a sphere): '))
-                fluid_density    = float(input('  Fluid density (kg/m³, Enter = 1.225): ') or '1.225')
+                area             = _ask('  Cross-sectional area (m²): ', cast=float)
+                drag_coefficient = _ask('  Drag coefficient (e.g. 0.47 for a sphere): ', cast=float)
+                fluid_density    = _ask('  Fluid density (kg/m³, Enter = 1.225): ', cast=float)
                 match query:
                     case 1:
                         result = Forces.TerminalVelocity(obj.mass, area, drag_coefficient, float(fluid_density), obj.g)
@@ -2451,7 +2612,7 @@ def AlgebraDebug():
         print()
         _ExitBar('Return to main menu')
         print()
-        sec = int(input('  Select a section: '))
+        sec = _menu_int('  Select a section: ')
         if sec == 0: return
         if sec < 1 or sec > len(SECTIONS):
             print('\n  That was not a valid section.')
@@ -2505,7 +2666,7 @@ def AlgebraDebug():
             print()
             _ExitBar('Return to sections')
             print()
-            choice = int(input('  Select a function: '))
+            choice = _menu_int('  Select a function: ')
             if choice == 0: break
             if sec == 1:
                 match choice:
@@ -2720,8 +2881,7 @@ def GeometryDebug():
         'Polygons',
         '3D Solids',
         'Coordinate Geometry',
-        'Vectors 2D',
-        'Vectors 3D',
+        'Vectors  (2D & 3D)',
     ]
     while True:
         _SectionHeader('Geometry', 'Choose a section')
@@ -2730,7 +2890,7 @@ def GeometryDebug():
         print()
         _ExitBar('Return to main menu')
         print()
-        sec = int(input('  Select a section: '))
+        sec = _menu_int('  Select a section: ')
         if sec == 0: return
         if sec < 1 or sec > len(SECTIONS):
             print('\n  That was not a valid section.')
@@ -2791,44 +2951,12 @@ def GeometryDebug():
                 print('  (5)  Line equation from a point and slope')
                 print('  (6)  Check if three points are collinear')
             elif sec == 9:
-                _p('Pure 2D vector operations — direction and magnitude in the x-y plane.')
+                _p('Vector operations in 2D and 3D space — choose a dimension inside.')
                 print()
-                print('  (1)   X component  (IHat)')
-                print('  (2)   Y component  (JHat)')
-                print('  (3)   Both X and Y components')
-                print('  (4)   Magnitude')
-                print('  (5)   Normalize  (unit vector)')
-                print('  (6)   Project a onto b')
-                print('  (7)   Add  a + b')
-                print('  (8)   Subtract  a - b')
-                print('  (9)   Dot product  a · b  (scalar)')
-                print('  (10)  Cross product  a × b  (Z scalar)')
-                print('  (11)  Scale a by scalar')
-                print('  (12)  Divide a by scalar')
-            elif sec == 10:
-                _p('Pure 3D vector operations — direction and magnitude in x-y-z space.')
-                print()
-                print('  (1)   X component  (IHat)')
-                print('  (2)   Y component  (JHat)')
-                print('  (3)   Z component  (KHat)')
-                print('  (4)   All three components  (IJK)')
-                print('  (5)   Magnitude')
-                print('  (6)   Normalize  (unit vector)')
-                print('  (7)   Project a onto b')
-                print('  (8)   Add  a + b')
-                print('  (9)   Subtract  a - b')
-                print('  (10)  Dot product  a · b  (scalar)')
-                print('  (11)  Cross product  a × b  (vector)')
-                print('  (12)  Scale a by scalar')
-                print('  (13)  Divide a by scalar')
-                print('  (14)  Scalar triple product  a · (b × c)')
-                print('  (15)  Dot with sum            a · (b + c)')
-                print('  (16)  Dot with difference     a · (b - c)')
-                print('  (17)  Cross with sum          a × (b + c)')
             print()
             _ExitBar('Return to sections')
             print()
-            choice = int(input('  Select a function: '))
+            choice = _menu_int('  Select a function: ')
             if choice == 0: break
             if sec == 1:
                 match choice:
@@ -3030,16 +3158,77 @@ def GeometryDebug():
                     case _:
                         print('\n  That was not a valid option.')
             elif sec == 9:
-                # Vectors 2D — pure geometric operations
-                def _v2(prompt='a'):
-                    raw = input(f'  Vector {prompt} — enter x and y separated by space: ').strip().split()
-                    return float(raw[0]), float(raw[1])
-                def _polar(x, y):
-                    mag   = math.sqrt(x**2 + y**2)
-                    angle = math.degrees(math.atan2(y, x)) % 360
-                    return mag, angle
-                ax, ay = _v2('a')
-                mag_a, angle_a = _polar(ax, ay)
+                VectorsDebug()
+                break
+            print()
+# ============================================================
+# VECTORS DEBUG  (2D & 3D) — sub-router from Geometry
+# ============================================================
+
+def VectorsDebug():
+    while True:
+        _SectionHeader('Vectors', 'Choose a dimension')
+        print('  (1)  2D  — operations in the x-y plane')
+        print('  (2)  3D  — operations in x-y-z space')
+        print()
+        _ExitBar('Return to Geometry menu')
+        print()
+        dim = _menu_int('  Choose: ')
+        if dim == 0: return
+        if dim == 1:
+            _Vectors2DDebug()
+        elif dim == 2:
+            _Vectors3DDebug()
+        else:
+            print('\n  That was not a valid option.')
+
+# ────────────────────────────────────────────────────────────
+
+def _Vectors2DDebug():
+    SECTIONS = [
+        'Components & Magnitude',
+        'Vector Operations',
+    ]
+    while True:
+        _SectionHeader('Vectors 2D', 'Choose a section')
+        print('  (1)  Components & Magnitude  (IHat, JHat, normalize, project)')
+        print('  (2)  Vector Operations        (add, subtract, dot, cross, scale)')
+        print()
+        _ExitBar('Return to Vectors menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        while True:
+            _SectionHeader('Vectors 2D', SECTIONS[sec - 1] if 1 <= sec <= 2 else '')
+            if sec == 1:
+                print('  (1)   X component  (IHat)')
+                print('  (2)   Y component  (JHat)')
+                print('  (3)   Both X and Y components')
+                print('  (4)   Magnitude')
+                print('  (5)   Normalize  (unit vector)')
+                print('  (6)   Project a onto b')
+            elif sec == 2:
+                print('  (1)   Add  a + b')
+                print('  (2)   Subtract  a - b')
+                print('  (3)   Dot product  a · b  (scalar)')
+                print('  (4)   Cross product  a × b  (Z scalar)')
+                print('  (5)   Scale a by scalar')
+                print('  (6)   Divide a by scalar')
+            print()
+            _ExitBar('Return to Vectors 2D sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            def _v2(prompt='a'):
+                raw = input(f'  Vector {prompt} — enter x and y separated by space: ').strip().split()
+                return float(raw[0]), float(raw[1])
+            def _polar(x, y):
+                mag   = math.sqrt(x**2 + y**2)
+                angle = math.degrees(math.atan2(y, x)) % 360
+                return mag, angle
+            ax, ay = _v2('a')
+            mag_a, angle_a = _polar(ax, ay)
+            if sec == 1:
                 match choice:
                     case 1:
                         print(f'\n  X component  =  {Physics_2D.IHat(mag_a, angle_a):.6f}')
@@ -3057,46 +3246,102 @@ def GeometryDebug():
                         bx, by = _v2('b')
                         mag_b, angle_b = _polar(bx, by)
                         print(f'\n  proj_b(a)  =  {Physics_2D.VectorProjection(mag_a, angle_a, mag_b, angle_b):.6f}')
-                    case 7:
-                        bx, by = _v2('b')
-                        mag_b, angle_b = _polar(bx, by)
+                    case _:
+                        print('\n  That was not a valid option.')
+                        continue
+            elif sec == 2:
+                if choice in (1, 2, 3, 4):
+                    bx, by = _v2('b')
+                    mag_b, angle_b = _polar(bx, by)
+                match choice:
+                    case 1:
                         rx, ry = Physics_2D.AddVectors(mag_a, angle_a, mag_b, angle_b)
                         print(f'\n  a + b  =  {rx:.6f}i  +  {ry:.6f}j')
-                    case 8:
-                        bx, by = _v2('b')
-                        mag_b, angle_b = _polar(bx, by)
+                    case 2:
                         rx, ry = Physics_2D.SubtractVectors(mag_a, angle_a, mag_b, angle_b)
                         print(f'\n  a - b  =  {rx:.6f}i  +  {ry:.6f}j')
-                    case 9:
-                        bx, by = _v2('b')
-                        mag_b, angle_b = _polar(bx, by)
+                    case 3:
                         print(f'\n  a · b  =  {Physics_2D.DotProduct(mag_a, angle_a, mag_b, angle_b):.6f}')
-                    case 10:
-                        bx, by = _v2('b')
-                        mag_b, angle_b = _polar(bx, by)
+                    case 4:
                         print(f'\n  a × b  =  {Physics_2D.CrossProduct(mag_a, angle_a, mag_b, angle_b):.6f}  (Z scalar)')
-                    case 11:
+                    case 5:
                         scalar = float(input('  Scalar: '))
                         rx, ry = Physics_2D.ScalarMultiply(scalar, mag_a, angle_a)
                         print(f'\n  {scalar} × a  =  {rx:.6f}i  +  {ry:.6f}j')
-                    case 12:
+                    case 6:
                         scalar = float(input('  Scalar: '))
                         rx, ry = Physics_2D.ScalarDivide(scalar, mag_a, angle_a)
                         print(f'\n  a / {scalar}  =  {rx:.6f}i  +  {ry:.6f}j')
                     case _:
                         print('\n  That was not a valid option.')
-            elif sec == 10:
-                # Vectors 3D — pure geometric operations
-                def _v3(prompt='a'):
-                    raw = input(f'  Vector {prompt} — enter x, y, z separated by spaces: ').strip().split()
-                    return float(raw[0]), float(raw[1]), float(raw[2])
-                def _sph(x, y, z):
-                    mag   = math.sqrt(x**2 + y**2 + z**2)
-                    theta = math.degrees(math.atan2(y, x)) % 360
-                    phi   = math.degrees(math.atan2(z, math.sqrt(x**2 + y**2)))
-                    return mag, theta, phi
-                ax, ay, az = _v3('a')
-                mag_a, theta_a, phi_a = _sph(ax, ay, az)
+                        continue
+            print()
+
+# ────────────────────────────────────────────────────────────
+
+def _Vectors3DDebug():
+    SECTIONS = [
+        'Components & Magnitude',
+        'Vector Operations',
+        'Compound Operations  (triple products etc.)',
+    ]
+    while True:
+        _SectionHeader('Vectors 3D', 'Choose a section')
+        print('  (1)  Components & Magnitude  (IHat/JHat/KHat, normalize, project)')
+        print('  (2)  Vector Operations        (add, subtract, dot, cross, scale)')
+        print('  (3)  Compound Operations      (scalar triple, dot/cross with sum/diff)')
+        print()
+        _ExitBar('Return to Vectors menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        while True:
+            _SectionHeader('Vectors 3D', SECTIONS[sec - 1] if 1 <= sec <= 3 else '')
+            if sec == 1:
+                print('  (1)   X component  (IHat)')
+                print('  (2)   Y component  (JHat)')
+                print('  (3)   Z component  (KHat)')
+                print('  (4)   All three components  (IJK)')
+                print('  (5)   Magnitude')
+                print('  (6)   Normalize  (unit vector)')
+                print('  (7)   Project a onto b')
+            elif sec == 2:
+                print('  (1)   Add  a + b')
+                print('  (2)   Subtract  a - b')
+                print('  (3)   Dot product  a · b  (scalar)')
+                print('  (4)   Cross product  a × b  (vector)')
+                print('  (5)   Scale a by scalar')
+                print('  (6)   Divide a by scalar')
+                print('  (7)   Magnitude of a vector')
+                print('  (8)   Normalize  (unit vector)')
+            elif sec == 3:
+                print('  — Two vectors —')
+                print('  (1)   a + b')
+                print('  (2)   a - b')
+                print('  (3)   a · b  (dot product)')
+                print('  (4)   a × b  (cross product)')
+                print()
+                print('  — Three vectors —')
+                print('  (5)   a · (b × c)   scalar triple product')
+                print('  (6)   a · (b + c)   dot with sum')
+                print('  (7)   a · (b - c)   dot with difference')
+                print('  (8)   a × (b + c)   cross with sum')
+            print()
+            _ExitBar('Return to Vectors 3D sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            def _v3(prompt='a'):
+                raw = input(f'  Vector {prompt} — enter x, y, z separated by spaces: ').strip().split()
+                return float(raw[0]), float(raw[1]), float(raw[2])
+            def _sph(x, y, z):
+                mag   = math.sqrt(x**2 + y**2 + z**2)
+                theta = math.degrees(math.atan2(y, x)) % 360
+                phi   = math.degrees(math.atan2(z, math.sqrt(x**2 + y**2)))
+                return mag, theta, phi
+            ax, ay, az = _v3('a')
+            mag_a, theta_a, phi_a = _sph(ax, ay, az)
+            if sec == 1:
                 match choice:
                     case 1:
                         print(f'\n  X component  =  {Physics_3D.IHat(mag_a, theta_a):.6f}')
@@ -3116,60 +3361,86 @@ def GeometryDebug():
                         bx, by, bz = _v3('b')
                         mag_b, theta_b, phi_b = _sph(bx, by, bz)
                         print(f'\n  proj_b(a)  =  {Physics_3D.VectorProjection(mag_a, theta_a, mag_b, theta_b, phi_a, phi_b):.6f}')
-                    case 8:
-                        bx, by, bz = _v3('b')
+                    case _:
+                        print('\n  That was not a valid option.')
+                        continue
+            elif sec == 2:
+                if choice in (1, 2, 3, 4):
+                    bx, by, bz = _v3('b')
+                match choice:
+                    case 1:
                         rx, ry, rz = Physics_3D.AddVectorsXYZ(ax, ay, az, bx, by, bz)
                         print(f'\n  a + b  =  {rx:.6f}i  +  {ry:.6f}j  +  {rz:.6f}k')
-                    case 9:
-                        bx, by, bz = _v3('b')
+                    case 2:
                         rx, ry, rz = Physics_3D.SubtractVectorsXYZ(ax, ay, az, bx, by, bz)
                         print(f'\n  a - b  =  {rx:.6f}i  +  {ry:.6f}j  +  {rz:.6f}k')
-                    case 10:
-                        bx, by, bz = _v3('b')
+                    case 3:
                         print(f'\n  a · b  =  {Physics_3D.DotProductXYZ(ax, ay, az, bx, by, bz):.6f}')
-                    case 11:
-                        bx, by, bz = _v3('b')
+                    case 4:
                         rx, ry, rz = Physics_3D.CrossProductXYZ(ax, ay, az, bx, by, bz)
                         print(f'\n  a × b  =  {rx:.6f}i  +  {ry:.6f}j  +  {rz:.6f}k')
-                    case 12:
+                    case 5:
                         scalar = float(input('  Scalar: '))
                         rx, ry, rz = Physics_3D.ScalarMultiply(scalar, mag_a, theta_a, phi_a)
                         print(f'\n  {scalar} × a  =  {rx:.6f}i  +  {ry:.6f}j  +  {rz:.6f}k')
-                    case 13:
+                    case 6:
                         scalar = float(input('  Scalar: '))
                         rx, ry, rz = Physics_3D.ScalarDivide(scalar, mag_a, theta_a, phi_a)
                         print(f'\n  a / {scalar}  =  {rx:.6f}i  +  {ry:.6f}j  +  {rz:.6f}k')
-                    case 14:
-                        bx, by, bz = _v3('b')
-                        cx, cy, cz = _v3('c')
+                    case 7:
+                        print(f'\n  |a|  =  {Physics_3D.MagnitudeXYZ(ax, ay, az):.6f}')
+                    case 8:
+                        ux, uy, uz = Physics_3D.NormalizeXYZ(ax, ay, az)
+                        print(f'\n  â  =  {ux:.6f}i  +  {uy:.6f}j  +  {uz:.6f}k')
+                    case _:
+                        print('\n  That was not a valid option.')
+                        continue
+            elif sec == 3:
+                if choice in (1, 2, 3, 4):
+                    bx, by, bz = _v3('b')
+                elif choice in (5, 6, 7, 8):
+                    bx, by, bz = _v3('b')
+                    cx, cy, cz = _v3('c')
+                else:
+                    print('\n  That was not a valid option.')
+                    continue
+                match choice:
+                    case 1:
+                        rx, ry, rz = Physics_3D.AddVectorsXYZ(ax, ay, az, bx, by, bz)
+                        print(f'\n  a + b  =  {rx:.6f}i  +  {ry:.6f}j  +  {rz:.6f}k')
+                    case 2:
+                        rx, ry, rz = Physics_3D.SubtractVectorsXYZ(ax, ay, az, bx, by, bz)
+                        print(f'\n  a - b  =  {rx:.6f}i  +  {ry:.6f}j  +  {rz:.6f}k')
+                    case 3:
+                        print(f'\n  a · b  =  {Physics_3D.DotProductXYZ(ax, ay, az, bx, by, bz):.6f}')
+                    case 4:
+                        rx, ry, rz = Physics_3D.CrossProductXYZ(ax, ay, az, bx, by, bz)
+                        print(f'\n  a × b  =  {rx:.6f}i  +  {ry:.6f}j  +  {rz:.6f}k')
+                    case 5:
                         result = Physics_3D.ScalarTripleProduct(ax, ay, az, bx, by, bz, cx, cy, cz)
                         bxc    = Physics_3D.CrossProductXYZ(bx, by, bz, cx, cy, cz)
                         print(f'\n  b × c  =  {bxc[0]:.4f}i  +  {bxc[1]:.4f}j  +  {bxc[2]:.4f}k')
                         print(f'  a · (b × c)  =  {result:.6f}')
-                    case 15:
-                        bx, by, bz = _v3('b')
-                        cx, cy, cz = _v3('c')
+                    case 6:
                         result = Physics_3D.DotWithSum(ax, ay, az, bx, by, bz, cx, cy, cz)
                         bpc = Physics_3D.AddVectorsXYZ(bx, by, bz, cx, cy, cz)
                         print(f'\n  b + c  =  {bpc[0]:.4f}i  +  {bpc[1]:.4f}j  +  {bpc[2]:.4f}k')
                         print(f'  a · (b + c)  =  {result:.6f}')
-                    case 16:
-                        bx, by, bz = _v3('b')
-                        cx, cy, cz = _v3('c')
+                    case 7:
                         result = Physics_3D.DotWithDifference(ax, ay, az, bx, by, bz, cx, cy, cz)
                         bmc = Physics_3D.SubtractVectorsXYZ(bx, by, bz, cx, cy, cz)
                         print(f'\n  b - c  =  {bmc[0]:.4f}i  +  {bmc[1]:.4f}j  +  {bmc[2]:.4f}k')
                         print(f'  a · (b - c)  =  {result:.6f}')
-                    case 17:
-                        bx, by, bz = _v3('b')
-                        cx, cy, cz = _v3('c')
+                    case 8:
                         bpc = Physics_3D.AddVectorsXYZ(bx, by, bz, cx, cy, cz)
                         rx, ry, rz = Physics_3D.CrossWithSum(ax, ay, az, bx, by, bz, cx, cy, cz)
                         print(f'\n  b + c  =  {bpc[0]:.4f}i  +  {bpc[1]:.4f}j  +  {bpc[2]:.4f}k')
                         print(f'  a × (b + c)  =  {rx:.6f}i  +  {ry:.6f}j  +  {rz:.6f}k')
                     case _:
                         print('\n  That was not a valid option.')
+                        continue
             print()
+
 
 # ============================================================
 # TRIGONOMETRY DEBUG
@@ -3193,7 +3464,7 @@ def TrigonometryDebug():
         print()
         _ExitBar('Return to main menu')
         print()
-        sec = int(input('  Select a section: '))
+        sec = _menu_int('  Select a section: ')
         if sec == 0: return
         if sec < 1 or sec > len(SECTIONS):
             print('\n  That was not a valid section.')
@@ -3254,7 +3525,7 @@ def TrigonometryDebug():
             print()
             _ExitBar('Return to sections')
             print()
-            choice = int(input('  Select a function: '))
+            choice = _menu_int('  Select a function: ')
             if choice == 0: break
             if sec == 1:
                 match choice:
@@ -3411,7 +3682,7 @@ def CalculusDebug():
         print()
         _ExitBar('Return to main menu')
         print()
-        sec = int(input('  Select a section: '))
+        sec = _menu_int('  Select a section: ')
         if sec == 0: return
         if sec < 1 or sec > len(SECTIONS):
             print('\n  That was not a valid section.')
@@ -3466,7 +3737,7 @@ def CalculusDebug():
             print()
             _ExitBar('Return to sections')
             print()
-            choice = int(input('  Select a function: '))
+            choice = _menu_int('  Select a function: ')
             if choice == 0: break
             if sec == 1:
                 match choice:
@@ -5457,4 +5728,2969 @@ def CombinatoricsDebug():
             except _AskAbort:
                 print()
                 _p('Calculation cancelled. Returning to the function list.')
+            print()
+
+# ============================================================
+# DISCRETE MATHEMATICS DEBUG
+# ============================================================
+
+def DiscreteMathDebug():
+    SECTIONS = [
+        'Propositional Logic',
+        'Predicate Logic',
+        'Set Theory',
+        'Relations',
+        'Functions',
+        'Number Theory',
+        'Sequences & Recurrences',
+        'Graph Theory',
+        'Trees',
+        'Boolean Algebra',
+    ]
+    while True:
+        _SectionHeader('Discrete Mathematics', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i:>2})  {s}')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+        while True:
+            _SectionHeader('Discrete Mathematics', SECTIONS[sec - 1])
+            if sec == 1:
+                _p('Two-valued truth functions.  Enter 1 = True, 0 = False.')
+                print()
+                print('  (1)   AND           p ∧ q')
+                print('  (2)   OR            p ∨ q')
+                print('  (3)   NOT           ¬p')
+                print('  (4)   IMPLIES       p → q')
+                print('  (5)   BICONDITIONAL p ↔ q')
+                print('  (6)   NAND          ¬(p ∧ q)')
+                print('  (7)   NOR           ¬(p ∨ q)')
+                print('  (8)   XOR           p ⊕ q')
+                print('  (9)   XNOR          ¬(p ⊕ q)')
+                print('  (10)  De Morgan — NOR   ¬(p∨q) = ¬p∧¬q')
+                print('  (11)  De Morgan — NAND  ¬(p∧q) = ¬p∨¬q')
+                print('  (12)  Truth table  (up to 4 variables, built-in formulas)')
+                print('  (13)  Is tautology / contradiction / satisfiable?')
+                print('  (14)  Logical equivalence check')
+            elif sec == 2:
+                _p('Predicates over a finite domain.  Enter domain as space-separated values.')
+                print()
+                print('  (1)   Universal quantifier    ∀x P(x)')
+                print('  (2)   Existential quantifier  ∃x P(x)')
+                print('  (3)   Unique existential      ∃!x P(x)')
+                print('  (4)   Predicate extension     {x | P(x)}')
+                print('  (5)   Counterexample for ∀x P(x)')
+            elif sec == 3:
+                _p('Enter sets as space-separated values, e.g.  1 2 3 4')
+                print()
+                print('  (1)   Union             A ∪ B')
+                print('  (2)   Intersection      A ∩ B')
+                print('  (3)   Difference        A \\ B')
+                print('  (4)   Symmetric diff    A △ B')
+                print('  (5)   Complement        Aᶜ  (needs universal set U)')
+                print('  (6)   Subset check      A ⊆ B')
+                print('  (7)   Proper subset     A ⊂ B')
+                print('  (8)   Power set         𝒫(A)  (max |A|=10)')
+                print('  (9)   Cartesian product A × B')
+                print('  (10)  Cardinality       |A|')
+                print('  (11)  Disjoint check    A ∩ B = ∅')
+            elif sec == 4:
+                _p('Enter a relation as space-separated pairs  a,b  e.g.  1,1 1,2 2,1')
+                _p('Enter the domain as space-separated values.')
+                print()
+                print('  (1)   Is reflexive')
+                print('  (2)   Is irreflexive')
+                print('  (3)   Is symmetric')
+                print('  (4)   Is antisymmetric')
+                print('  (5)   Is asymmetric')
+                print('  (6)   Is transitive')
+                print('  (7)   Is equivalence relation  (ref + sym + trans)')
+                print('  (8)   Is partial order          (ref + anti + trans)')
+                print('  (9)   Is total order            (partial order + totality)')
+                print('  (10)  Equivalence classes')
+                print('  (11)  Transitive closure  (Warshall)')
+                print('  (12)  Reflexive closure')
+                print('  (13)  Symmetric closure')
+                print('  (14)  Relation composition  R ∘ S')
+            elif sec == 5:
+                _p('Enter function as  input:output  pairs, e.g.  1:a 2:b 3:c')
+                _p('Enter domain and codomain as space-separated values.')
+                print()
+                print('  (1)   Is injective    (one-to-one)')
+                print('  (2)   Is surjective   (onto)')
+                print('  (3)   Is bijective    (one-to-one correspondence)')
+                print('  (4)   Function image  (set of outputs)')
+                print('  (5)   Preimage of a value')
+                print('  (6)   Inverse function  (if bijective)')
+                print('  (7)   Composition  f ∘ g')
+                print('  (8)   Count: total functions    mⁿ')
+                print('  (9)   Count: injections         P(m,n)')
+                print('  (10)  Count: bijections         n!')
+            elif sec == 6:
+                print('  (1)   Is divisible            a | b')
+                print('  (2)   GCD                     Euclidean algorithm')
+                print('  (3)   LCM')
+                print('  (4)   Extended GCD            Bézout coefficients  ax + by = gcd')
+                print('  (5)   Is prime')
+                print('  (6)   Prime factorization')
+                print('  (7)   Primes up to n          Sieve of Eratosthenes')
+                print('  (8)   Euler\'s totient         φ(n)')
+                print('  (9)   Divisor count           d(n)')
+                print('  (10)  Divisor sum             σ(n)')
+                print('  (11)  Is perfect number')
+                print('  (12)  Modular arithmetic      a + b, a − b, a · b  (mod m)')
+                print('  (13)  Modular power           aⁿ mod m')
+                print('  (14)  Modular inverse         x s.t. ax ≡ 1 (mod m)')
+                print('  (15)  Is congruent            a ≡ b (mod m)')
+                print('  (16)  Linear congruence       solve ax ≡ b (mod m)')
+                print('  (17)  Chinese Remainder Theorem')
+                print('  (18)  Fermat\'s Little Theorem  aᵖ⁻¹ ≡ 1 (mod p)')
+                print('  (19)  Wilson\'s Theorem        (p−1)! ≡ −1 (mod p)')
+            elif sec == 7:
+                print('  (1)   Arithmetic: nth term    a + (n−1)d')
+                print('  (2)   Arithmetic: sum         n/2 · (2a + (n−1)d)')
+                print('  (3)   Geometric: nth term     a · rⁿ⁻¹')
+                print('  (4)   Geometric: sum          a(rⁿ−1)/(r−1)')
+                print('  (5)   Infinite geometric sum  a/(1−r)  for |r| < 1')
+                print('  (6)   Linear recurrence       nth term  aₙ = c₁aₙ₋₁ + c₂aₙ₋₂ + …')
+                print('  (7)   Detect arithmetic sequence')
+                print('  (8)   Detect geometric sequence')
+            elif sec == 8:
+                _p('Graphs as adjacency dicts.  Enter edges as  u,v  pairs, one per line, blank to finish.')
+                print()
+                print('  (1)   Vertex degree')
+                print('  (2)   Degree sequence')
+                print('  (3)   Edge count')
+                print('  (4)   Is Eulerian       (Euler circuit — all even degrees)')
+                print('  (5)   Is semi-Eulerian  (Euler path — exactly 2 odd degrees)')
+                print('  (6)   Is connected')
+                print('  (7)   Is complete')
+                print('  (8)   Is bipartite')
+                print('  (9)   BFS traversal')
+                print('  (10)  DFS traversal')
+                print('  (11)  Shortest path      Dijkstra (weighted)')
+                print('  (12)  Minimum spanning tree  Kruskal (weighted)')
+                print('  (13)  Greedy colouring   vertex → colour assignment')
+                print('  (14)  Chromatic number bound')
+            elif sec == 9:
+                _p('Trees use adjacency dicts.  Rooted trees also need a root and children dict.')
+                print()
+                print('  (1)   Is tree         (connected + n−1 edges)')
+                print('  (2)   Tree height     (longest root-to-leaf path)')
+                print('  (3)   Leaf nodes')
+                print('  (4)   Preorder traversal')
+                print('  (5)   Postorder traversal')
+                print('  (6)   Inorder traversal  (binary trees)')
+                print('  (7)   Number of labeled trees  Cayley: nⁿ⁻²')
+                print('  (8)   Prüfer sequence  (from edge list)')
+                print('  (9)   Prüfer to tree   (reconstruct edges)')
+            elif sec == 10:
+                _p('Boolean values: 1 = True, 0 = False.')
+                print()
+                print('  (1)   AND   a ∧ b')
+                print('  (2)   OR    a ∨ b')
+                print('  (3)   NOT   ¬a')
+                print('  (4)   NAND  ¬(a ∧ b)')
+                print('  (5)   NOR   ¬(a ∨ b)')
+                print('  (6)   XOR   a ⊕ b')
+                print('  (7)   XNOR  a ↔ b')
+                print('  (8)   IMPLIES  a → b')
+                print('  (9)   DNF  (from minterm list)')
+                print('  (10)  CNF  (from maxterm list)')
+                print('  (11)  Quine-McCluskey  (basic prime implicants)')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            print()
+            try:
+                # ── Helpers ──────────────────────────────────────────────────
+                def _ask_set(prompt='  Set (space-separated values): '):
+                    raw = input(prompt).strip().split()
+                    try:
+                        return [int(x) for x in raw]
+                    except ValueError:
+                        return raw
+
+                def _ask_relation(prompt='  Pairs a,b separated by spaces: '):
+                    raw = input(prompt).strip().split()
+                    pairs = set()
+                    for item in raw:
+                        a, b = item.split(',')
+                        try:
+                            pairs.add((int(a), int(b)))
+                        except ValueError:
+                            pairs.add((a.strip(), b.strip()))
+                    return pairs
+
+                def _ask_graph(weighted=False):
+                    print('  Enter edges as  u,v  (or  u,v,weight  for weighted). Blank line to finish.')
+                    adj = {}
+                    while True:
+                        line = input('  Edge: ').strip()
+                        if not line:
+                            break
+                        parts = line.replace(',', ' ').split()
+                        u, v = parts[0], parts[1]
+                        try: u = int(u)
+                        except: pass
+                        try: v = int(v)
+                        except: pass
+                        if weighted and len(parts) >= 3:
+                            w = float(parts[2])
+                            adj.setdefault(u, []).append((v, w))
+                            adj.setdefault(v, []).append((u, w))
+                        else:
+                            adj.setdefault(u, []).append(v)
+                            adj.setdefault(v, []).append(u)
+                    return adj
+
+                def _ask_children():
+                    print('  Enter children as  parent:child1,child2  per line. Blank to finish.')
+                    children = {}
+                    nodes    = set()
+                    while True:
+                        line = input('  Node: ').strip()
+                        if not line:
+                            break
+                        parent, kids = line.split(':')
+                        parent = parent.strip()
+                        try: parent = int(parent)
+                        except: pass
+                        kid_list = []
+                        for k in kids.split(','):
+                            k = k.strip()
+                            try: k = int(k)
+                            except: pass
+                            kid_list.append(k)
+                            nodes.add(k)
+                        nodes.add(parent)
+                        children[parent] = kid_list
+                    for n in nodes:
+                        if n not in children:
+                            children[n] = []
+                    return children, nodes
+
+                # ── Section 1: Propositional Logic ───────────────────────────
+                if sec == 1:
+                    if choice in (1, 2, 4, 5, 6, 7, 8, 9, 10, 11):
+                        p = bool(int(input('  p (1=True, 0=False): ')))
+                        q = bool(int(input('  q (1=True, 0=False): ')))
+                    elif choice == 3:
+                        p = bool(int(input('  p (1=True, 0=False): ')))
+                    match choice:
+                        case 1:  print(f'\n  p ∧ q  =  {int(Discrete.LogicalAnd(p,q))}')
+                        case 2:  print(f'\n  p ∨ q  =  {int(Discrete.LogicalOr(p,q))}')
+                        case 3:  print(f'\n  ¬p  =  {int(Discrete.LogicalNot(p))}')
+                        case 4:  print(f'\n  p → q  =  {int(Discrete.LogicalImplies(p,q))}')
+                        case 5:  print(f'\n  p ↔ q  =  {int(Discrete.LogicalBiconditional(p,q))}')
+                        case 6:  print(f'\n  p ↑ q  (NAND)  =  {int(Discrete.LogicalNand(p,q))}')
+                        case 7:  print(f'\n  p ↓ q  (NOR)   =  {int(Discrete.LogicalNor(p,q))}')
+                        case 8:  print(f'\n  p ⊕ q  (XOR)   =  {int(Discrete.LogicalXor(p,q))}')
+                        case 9:  print(f'\n  XNOR(p,q)       =  {int(Discrete.LogicalXnor(p,q))}')
+                        case 10:
+                            nor, dm, match_ = Discrete.DeMorgansNor(p, q)
+                            print(f'\n  ¬(p∨q)   =  {int(nor)}')
+                            print(f'  ¬p ∧ ¬q  =  {int(dm)}')
+                            print(f'  Match    :  {"Yes ✓" if match_ else "No ✗"}')
+                        case 11:
+                            nand, dm, match_ = Discrete.DeMorgansNand(p, q)
+                            print(f'\n  ¬(p∧q)   =  {int(nand)}')
+                            print(f'  ¬p ∨ ¬q  =  {int(dm)}')
+                            print(f'  Match    :  {"Yes ✓" if match_ else "No ✗"}')
+                        case 12:
+                            print()
+                            print('  Choose a formula:')
+                            print('  (A) p ∧ q       (B) p ∨ q       (C) p → q')
+                            print('  (D) p ↔ q       (E) ¬p ∧ q      (F) (p∨q) ∧ ¬(p∧q)')
+                            fkey = input('  Formula: ').strip().upper()
+                            formulas = {
+                                'A': (lambda p, q: Discrete.LogicalAnd(p, q),   2),
+                                'B': (lambda p, q: Discrete.LogicalOr(p, q),    2),
+                                'C': (lambda p, q: Discrete.LogicalImplies(p,q),2),
+                                'D': (lambda p, q: Discrete.LogicalBiconditional(p,q), 2),
+                                'E': (lambda p, q: (not p) and q, 2),
+                                'F': (lambda p, q: Discrete.LogicalXor(p, q),   2),
+                            }
+                            if fkey not in formulas:
+                                print('\n  Invalid choice.')
+                            else:
+                                fn, nv = formulas[fkey]
+                                table  = Discrete.TruthTable(fn, nv)
+                                vars_  = ['p', 'q'][:nv]
+                                header = '  ' + '  '.join(f'{v}' for v in vars_) + '   Result'
+                                print(f'\n{header}')
+                                print('  ' + '─' * (len(header) - 2))
+                                for assignment, result in table:
+                                    row = '  ' + '  '.join(f'{int(v)}' for v in assignment) + f'     {int(result)}'
+                                    print(row)
+                        case 13:
+                            print()
+                            print('  Choose a formula (same list as above): ', end='')
+                            fkey = input().strip().upper()
+                            formulas = {
+                                'A': (lambda p, q: Discrete.LogicalAnd(p, q), 2),
+                                'B': (lambda p, q: Discrete.LogicalOr(p, q),  2),
+                                'C': (lambda p, q: Discrete.LogicalImplies(p, q), 2),
+                                'D': (lambda p, q: Discrete.LogicalBiconditional(p, q), 2),
+                                'E': (lambda p, q: (not p) and q, 2),
+                                'F': (lambda p, q: Discrete.LogicalXor(p, q), 2),
+                            }
+                            if fkey not in formulas:
+                                print('\n  Invalid choice.')
+                            else:
+                                fn, nv = formulas[fkey]
+                                print(f'\n  Tautology      :  {"Yes" if Discrete.IsTautology(fn, nv) else "No"}')
+                                print(f'  Contradiction  :  {"Yes" if Discrete.IsContradiction(fn, nv) else "No"}')
+                                print(f'  Satisfiable    :  {"Yes" if Discrete.IsSatisfiable(fn, nv) else "No"}')
+                        case 14:
+                            print('  Compare two formulas (A–F from list above).')
+                            f1k = input('  Formula 1: ').strip().upper()
+                            f2k = input('  Formula 2: ').strip().upper()
+                            formulas = {
+                                'A': lambda p, q: Discrete.LogicalAnd(p, q),
+                                'B': lambda p, q: Discrete.LogicalOr(p, q),
+                                'C': lambda p, q: Discrete.LogicalImplies(p, q),
+                                'D': lambda p, q: Discrete.LogicalBiconditional(p, q),
+                                'E': lambda p, q: (not p) and q,
+                                'F': lambda p, q: Discrete.LogicalXor(p, q),
+                            }
+                            if f1k not in formulas or f2k not in formulas:
+                                print('\n  Invalid choice.')
+                            else:
+                                eq = Discrete.AreLogicallyEquivalent(formulas[f1k], formulas[f2k], 2)
+                                print(f'\n  Logically equivalent:  {"Yes ✓" if eq else "No ✗"}')
+                        case _: print('  That was not a valid option.')
+
+                # ── Section 2: Predicate Logic ────────────────────────────────
+                elif sec == 2:
+                    if choice != 8:
+                        dom_raw = input('  Domain (space-separated): ').strip().split()
+                        try:    domain = [int(x) for x in dom_raw]
+                        except: domain = dom_raw
+                        pred_expr = input('  Predicate expression (Python, use x): ').strip()
+                        pred_fn = eval(f'lambda x: {pred_expr}')
+                    match choice:
+                        case 1:
+                            result = Discrete.UniversalQuantifier(pred_fn, domain)
+                            print(f'\n  ∀x P(x)  =  {"True" if result else "False"}')
+                        case 2:
+                            result = Discrete.ExistentialQuantifier(pred_fn, domain)
+                            print(f'\n  ∃x P(x)  =  {"True" if result else "False"}')
+                        case 3:
+                            result = Discrete.UniqueExistential(pred_fn, domain)
+                            print(f'\n  ∃!x P(x)  =  {"True" if result else "False"}')
+                        case 4:
+                            ext = Discrete.PredicateExtension(pred_fn, domain)
+                            print(f'\n  {{x | P(x)}}  =  {{{", ".join(str(x) for x in ext)}}}')
+                        case 5:
+                            cex = Discrete.UniversalCounterexample(pred_fn, domain)
+                            if cex is None:
+                                print('\n  No counterexample — ∀x P(x) holds on this domain.')
+                            else:
+                                print(f'\n  Counterexample:  x = {cex}  (P({cex}) is False)')
+                        case _: print('  That was not a valid option.')
+
+                # ── Section 3: Set Theory ──────────────────────────────────────
+                elif sec == 3:
+                    if choice in (1,2,3,4,6,7,9,11):
+                        A = _ask_set('  Set A: ')
+                        B = _ask_set('  Set B: ')
+                    elif choice in (5,):
+                        A = _ask_set('  Set A: ')
+                        U = _ask_set('  Universal set U: ')
+                    elif choice in (8,10):
+                        A = _ask_set('  Set A: ')
+                    match choice:
+                        case 1:  print(f'\n  A ∪ B  =  {sorted(Discrete.SetUnion(A,B))}')
+                        case 2:  print(f'\n  A ∩ B  =  {sorted(Discrete.SetIntersection(A,B))}')
+                        case 3:  print(f'\n  A \\ B  =  {sorted(Discrete.SetDifference(A,B))}')
+                        case 4:  print(f'\n  A △ B  =  {sorted(Discrete.SymmetricDifference(A,B))}')
+                        case 5:  print(f'\n  Aᶜ     =  {sorted(Discrete.SetComplement(A,U))}')
+                        case 6:  print(f'\n  A ⊆ B  :  {"Yes" if Discrete.IsSubset(A,B) else "No"}')
+                        case 7:  print(f'\n  A ⊂ B  :  {"Yes" if Discrete.IsProperSubset(A,B) else "No"}')
+                        case 8:
+                            ps = Discrete.PowerSet(A)
+                            print(f'\n  |𝒫(A)|  =  {len(ps)}  (= 2^{len(set(A))})')
+                            print(f'  𝒫(A)   =  {{')
+                            for s in sorted(ps, key=lambda x: (len(x), sorted(x))):
+                                print(f'             {{{", ".join(str(x) for x in sorted(s))}}}' if s else '             ∅')
+                            print('           }')
+                        case 9:
+                            cp = Discrete.CartesianProduct(A, B)
+                            print(f'\n  A × B  ({len(cp)} pairs):')
+                            for pair in cp:
+                                print(f'    {pair}')
+                        case 10: print(f'\n  |A|  =  {Discrete.Cardinality(A)}')
+                        case 11: print(f'\n  Disjoint:  {"Yes" if Discrete.AreDisjoint(A,B) else "No"}')
+                        case _:  print('  That was not a valid option.')
+
+                # ── Section 4: Relations ──────────────────────────────────────
+                elif sec == 4:
+                    dom = _ask_set('  Domain (space-separated): ')
+                    if choice != 14:
+                        rel = _ask_relation('  Relation pairs (a,b ...): ')
+                    match choice:
+                        case 1:  print(f'\n  Reflexive     :  {"Yes" if Discrete.IsReflexive(rel, dom) else "No"}')
+                        case 2:  print(f'\n  Irreflexive   :  {"Yes" if Discrete.IsIrreflexive(rel, dom) else "No"}')
+                        case 3:  print(f'\n  Symmetric     :  {"Yes" if Discrete.IsSymmetric(rel, dom) else "No"}')
+                        case 4:  print(f'\n  Antisymmetric :  {"Yes" if Discrete.IsAntisymmetric(rel, dom) else "No"}')
+                        case 5:  print(f'\n  Asymmetric    :  {"Yes" if Discrete.IsAsymmetric(rel, dom) else "No"}')
+                        case 6:  print(f'\n  Transitive    :  {"Yes" if Discrete.IsTransitive(rel, dom) else "No"}')
+                        case 7:
+                            result, ref, sym, tran = Discrete.IsEquivalenceRelation(rel, dom)
+                            print(f'\n  Reflexive: {"✓" if ref else "✗"}   Symmetric: {"✓" if sym else "✗"}   Transitive: {"✓" if tran else "✗"}')
+                            print(f'  Equivalence relation: {"Yes ✓" if result else "No ✗"}')
+                        case 8:
+                            result, ref, anti, tran = Discrete.IsPartialOrder(rel, dom)
+                            print(f'\n  Reflexive: {"✓" if ref else "✗"}   Antisymmetric: {"✓" if anti else "✗"}   Transitive: {"✓" if tran else "✗"}')
+                            print(f'  Partial order: {"Yes ✓" if result else "No ✗"}')
+                        case 9:
+                            result, ref, anti, tran, total = Discrete.IsTotalOrder(rel, dom)
+                            print(f'\n  Reflexive: {"✓" if ref else "✗"}   Antisymmetric: {"✓" if anti else "✗"}   Transitive: {"✓" if tran else "✗"}   Total: {"✓" if total else "✗"}')
+                            print(f'  Total order: {"Yes ✓" if result else "No ✗"}')
+                        case 10:
+                            classes = Discrete.EquivalenceClasses(rel, dom)
+                            print(f'\n  Equivalence classes ({len(classes)}):')
+                            for i, cls in enumerate(sorted(classes, key=lambda c: sorted(c)[0]), 1):
+                                print(f'    [{i}]  {{{", ".join(str(x) for x in sorted(cls))}}}')
+                        case 11:
+                            tc = Discrete.TransitiveClosure(rel, dom)
+                            print(f'\n  Transitive closure  ({len(tc)} pairs):')
+                            for pair in sorted(tc):
+                                print(f'    {pair}')
+                        case 12:
+                            rc = Discrete.ReflexiveClosure(rel, dom)
+                            print(f'\n  Reflexive closure  ({len(rc)} pairs):')
+                            for pair in sorted(rc):
+                                print(f'    {pair}')
+                        case 13:
+                            sc = Discrete.SymmetricClosure(rel)
+                            print(f'\n  Symmetric closure  ({len(sc)} pairs):')
+                            for pair in sorted(sc):
+                                print(f'    {pair}')
+                        case 14:
+                            print('  Enter relation R (pairs a,b):')
+                            R = _ask_relation()
+                            print('  Enter relation S (pairs a,b):')
+                            S = _ask_relation()
+                            comp = Discrete.RelationComposition(R, S)
+                            print(f'\n  R ∘ S  ({len(comp)} pairs):')
+                            for pair in sorted(comp):
+                                print(f'    {pair}')
+                        case _: print('  That was not a valid option.')
+
+                # ── Section 5: Functions ──────────────────────────────────────
+                elif sec == 5:
+                    if choice not in (8, 9, 10):
+                        fn_raw = input('  Function as  input:output  pairs: ').strip().split()
+                        fn_dict = {}
+                        for pair in fn_raw:
+                            k, v = pair.split(':')
+                            try: k = int(k)
+                            except: pass
+                            try: v = int(v)
+                            except: pass
+                            fn_dict[k] = v
+                        dom = _ask_set('  Domain: ')
+                        cod = _ask_set('  Codomain: ')
+                    match choice:
+                        case 1:  print(f'\n  Injective  :  {"Yes" if Discrete.IsInjective(fn_dict, dom, cod) else "No"}')
+                        case 2:  print(f'\n  Surjective :  {"Yes" if Discrete.IsSurjective(fn_dict, dom, cod) else "No"}')
+                        case 3:  print(f'\n  Bijective  :  {"Yes" if Discrete.IsBijective(fn_dict, dom, cod) else "No"}')
+                        case 4:
+                            img = Discrete.FunctionImage(fn_dict, dom)
+                            print(f'\n  Image  =  {{{", ".join(str(x) for x in sorted(img))}}}')
+                        case 5:
+                            y_raw = input('  Value y: ').strip()
+                            try: y_val = int(y_raw)
+                            except: y_val = y_raw
+                            pre = Discrete.FunctionPreimage(fn_dict, y_val, dom)
+                            print(f'\n  f⁻¹({y_val})  =  {{{", ".join(str(x) for x in sorted(pre))}}}')
+                        case 6:
+                            inv = Discrete.FunctionInverse(fn_dict, dom, cod)
+                            if inv is None:
+                                print('\n  No inverse — function is not bijective.')
+                            else:
+                                print(f'\n  f⁻¹  =  {inv}')
+                        case 7:
+                            print('  Enter f as  input:output  pairs: ', end='')
+                            f_raw = input().strip().split()
+                            f_dict = {}
+                            for pair in f_raw:
+                                k, v = pair.split(':')
+                                try: k = int(k)
+                                except: pass
+                                try: v = int(v)
+                                except: pass
+                                f_dict[k] = v
+                            comp = Discrete.FunctionComposition(f_dict, fn_dict, dom)
+                            print(f'\n  (f ∘ g)  =  {comp}')
+                        case 8:
+                            n = _ask_int('n  (size of domain)')
+                            m = _ask_int('m  (size of codomain)')
+                            print(f'\n  Total functions  (mⁿ)  =  {Discrete.NumberOfFunctions(n,m)}')
+                        case 9:
+                            n = _ask_int('n  (domain size)')
+                            m = _ask_int('m  (codomain size, m ≥ n for injections)')
+                            print(f'\n  Injections  P({m},{n})  =  {Discrete.NumberOfInjections(n,m)}')
+                        case 10:
+                            n = _ask_int('n  (set size — bijections = n!)')
+                            print(f'\n  Bijections  =  {n}!  =  {Discrete.NumberOfBijections(n)}')
+                        case _: print('  That was not a valid option.')
+
+                # ── Section 6: Number Theory ──────────────────────────────────
+                elif sec == 6:
+                    match choice:
+                        case 1:
+                            b = _ask_int('b  (dividend)')
+                            a = _ask_int('a  (divisor)')
+                            print(f'\n  {a} | {b}  :  {"Yes" if Discrete.IsDivisible(b,a) else "No"}')
+                        case 2:
+                            a = _ask_int('a'); b = _ask_int('b')
+                            print(f'\n  gcd({a},{b})  =  {Discrete.GCD(a,b)}')
+                        case 3:
+                            a = _ask_int('a'); b = _ask_int('b')
+                            print(f'\n  lcm({a},{b})  =  {Discrete.LCM(a,b)}')
+                        case 4:
+                            a = _ask_int('a'); b = _ask_int('b')
+                            g, x, y = Discrete.ExtendedGCD(a, b)
+                            print(f'\n  gcd({a},{b})  =  {g}')
+                            print(f'  {a}·({x}) + {b}·({y})  =  {g}  ✓')
+                        case 5:
+                            n = _ask_int('n')
+                            print(f'\n  {n} is {"prime" if Discrete.IsPrime(n) else "not prime"}')
+                        case 6:
+                            n = _ask_int('n')
+                            factors = Discrete.PrimeFactorization(n)
+                            parts   = ' · '.join(f'{p}^{e}' if e > 1 else str(p) for p, e in factors)
+                            print(f'\n  {n}  =  {parts if parts else "1"}')
+                        case 7:
+                            n = _ask_int('n')
+                            primes = Discrete.Primes(n)
+                            print(f'\n  Primes ≤ {n}  ({len(primes)} total):')
+                            print('  ' + ', '.join(str(p) for p in primes))
+                        case 8:
+                            n = _ask_int('n')
+                            print(f'\n  φ({n})  =  {Discrete.EulersTotient(n)}')
+                        case 9:
+                            n = _ask_int('n')
+                            print(f'\n  d({n})  =  {Discrete.DivisorCount(n)}')
+                        case 10:
+                            n = _ask_int('n')
+                            print(f'\n  σ({n})  =  {Discrete.DivisorSum(n)}')
+                        case 11:
+                            n = _ask_int('n')
+                            print(f'\n  {n} is {"a perfect number" if Discrete.IsPerfect(n) else "not a perfect number"}')
+                        case 12:
+                            a = _ask_int('a'); b = _ask_int('b'); m = _ask_int('m  (modulus)')
+                            print(f'\n  ({a} + {b}) mod {m}  =  {Discrete.ModularAdd(a,b,m)}')
+                            print(f'  ({a} − {b}) mod {m}  =  {Discrete.ModularSubtract(a,b,m)}')
+                            print(f'  ({a} × {b}) mod {m}  =  {Discrete.ModularMultiply(a,b,m)}')
+                        case 13:
+                            base = _ask_int('base'); exp = _ask_int('exponent'); mod = _ask_int('modulus')
+                            print(f'\n  {base}^{exp} mod {mod}  =  {Discrete.ModularPower(base,exp,mod)}')
+                        case 14:
+                            a = _ask_int('a'); m = _ask_int('m  (modulus)')
+                            inv = Discrete.ModularInverse(a, m)
+                            if inv is None:
+                                print(f'\n  No inverse — gcd({a},{m}) ≠ 1')
+                            else:
+                                print(f'\n  {a}⁻¹ mod {m}  =  {inv}   ({a} × {inv} mod {m} = {(a*inv)%m})')
+                        case 15:
+                            a = _ask_int('a'); b = _ask_int('b'); m = _ask_int('m')
+                            print(f'\n  {a} ≡ {b} (mod {m})  :  {"Yes" if Discrete.IsCongruent(a,b,m) else "No"}')
+                        case 16:
+                            a = _ask_int('a'); b = _ask_int('b'); m = _ask_int('m')
+                            sols = Discrete.LinearCongruence(a, b, m)
+                            if not sols:
+                                print(f'\n  No solution — gcd({a},{m}) does not divide {b}')
+                            else:
+                                print(f'\n  Solutions to {a}x ≡ {b} (mod {m}):')
+                                for x in sols:
+                                    print(f'    x ≡ {x} (mod {m})')
+                        case 17:
+                            print('  Enter residues (space-separated): ', end='')
+                            remainders = [int(x) for x in input().strip().split()]
+                            print('  Enter moduli   (space-separated): ', end='')
+                            moduli = [int(x) for x in input().strip().split()]
+                            sol = Discrete.ChineseRemainderTheorem(remainders, moduli)
+                            M = 1
+                            for m in moduli: M *= m
+                            if sol is None:
+                                print('\n  No solution — moduli must be pairwise coprime.')
+                            else:
+                                print(f'\n  x  ≡  {sol}  (mod {M})')
+                        case 18:
+                            a = _ask_int('a'); p = _ask_int('p  (prime)')
+                            lhs, rhs, holds = Discrete.FermatsLittleTheorem(a, p)
+                            if lhs is None:
+                                print('\n  p must be prime.')
+                            else:
+                                print(f'\n  {a}^({p}−1) mod {p}  =  {lhs}')
+                                print(f'  Fermat\'s Little Theorem holds:  {"Yes ✓" if holds else "No ✗"}')
+                        case 19:
+                            p = _ask_int('p')
+                            lhs, rhs, holds = Discrete.WilsonsTheorem(p)
+                            if lhs is None:
+                                print('\n  p must be ≥ 2.')
+                            else:
+                                print(f'\n  ({p}−1)! mod {p}  =  {lhs}')
+                                print(f'  Wilson\'s Theorem holds:  {"Yes ✓" if holds else "No ✗"}')
+                                print(f'  {p} is {"prime" if holds else "not prime"} (by Wilson\'s Theorem)')
+                        case _: print('  That was not a valid option.')
+
+                # ── Section 7: Sequences & Recurrences ───────────────────────
+                elif sec == 7:
+                    match choice:
+                        case 1:
+                            a = _ask('a  (first term)'); d = _ask('d  (common difference)'); n = _ask_int('n  (term, 1-indexed)')
+                            print(f'\n  a_{n}  =  {Discrete.ArithmeticTerm(a,d,n):.6f}')
+                        case 2:
+                            a = _ask('a  (first term)'); d = _ask('d  (common difference)'); n = _ask_int('n  (number of terms)')
+                            print(f'\n  S_{n}  =  {Discrete.ArithmeticSum(a,d,n):.6f}')
+                        case 3:
+                            a = _ask('a  (first term)'); r = _ask('r  (common ratio)'); n = _ask_int('n  (term, 1-indexed)')
+                            print(f'\n  a_{n}  =  {Discrete.GeometricTerm(a,r,n):.6f}')
+                        case 4:
+                            a = _ask('a  (first term)'); r = _ask('r  (common ratio)'); n = _ask_int('n  (number of terms)')
+                            print(f'\n  S_{n}  =  {Discrete.GeometricSum(a,r,n):.6f}')
+                        case 5:
+                            a = _ask('a  (first term)'); r = _ask('r  (ratio, |r| < 1)')
+                            result = Discrete.InfiniteGeometricSum(a, r)
+                            if result is None:
+                                print('\n  Series diverges — |r| must be less than 1.')
+                            else:
+                                print(f'\n  S∞  =  {result:.6f}')
+                        case 6:
+                            print('  Initial values (space-separated, a₀ first): ', end='')
+                            init = [float(x) for x in input().strip().split()]
+                            print('  Coefficients  (c₁ c₂ ..., space-separated): ', end='')
+                            coeffs = [float(x) for x in input().strip().split()]
+                            n = _ask_int('n  (0-indexed term to compute)')
+                            val = Discrete.LinearRecurrenceNthTerm(init, coeffs, n)
+                            print(f'\n  a_{n}  =  {val:.6f}')
+                        case 7:
+                            print('  Sequence (space-separated): ', end='')
+                            seq = [float(x) for x in input().strip().split()]
+                            is_arith, d = Discrete.IsArithmetic(seq)
+                            print(f'\n  Arithmetic:  {"Yes" if is_arith else "No"}' + (f'   d = {d}' if is_arith else ''))
+                        case 8:
+                            print('  Sequence (space-separated): ', end='')
+                            seq = [float(x) for x in input().strip().split()]
+                            is_geo, r = Discrete.IsGeometric(seq)
+                            print(f'\n  Geometric:  {"Yes" if is_geo else "No"}' + (f'   r = {r:.4f}' if is_geo else ''))
+                        case _: print('  That was not a valid option.')
+
+                # ── Section 8: Graph Theory ───────────────────────────────────
+                elif sec == 8:
+                    if choice in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14):
+                        adj = _ask_graph(weighted=False)
+                    elif choice in (11, 12):
+                        adj = _ask_graph(weighted=True)
+                    match choice:
+                        case 1:
+                            v_raw = input('  Vertex: ').strip()
+                            try: v = int(v_raw)
+                            except: v = v_raw
+                            print(f'\n  deg({v})  =  {Discrete.VertexDegree(adj, v)}')
+                        case 2:
+                            ds = Discrete.DegreeSequence(adj)
+                            print(f'\n  Degree sequence:  {ds}')
+                        case 3:
+                            print(f'\n  Edges:  {Discrete.EdgeCount(adj)}')
+                        case 4:
+                            print(f'\n  Eulerian (Euler circuit):  {"Yes" if Discrete.IsEulerian(adj) else "No"}')
+                        case 5:
+                            print(f'\n  Semi-Eulerian (Euler path):  {"Yes" if Discrete.IsSemiEulerian(adj) else "No"}')
+                        case 6:
+                            print(f'\n  Connected:  {"Yes" if Discrete.IsConnected(adj) else "No"}')
+                        case 7:
+                            print(f'\n  Complete:  {"Yes" if Discrete.IsComplete(adj) else "No"}')
+                        case 8:
+                            bip, A, B = Discrete.IsBipartite(adj)
+                            print(f'\n  Bipartite:  {"Yes" if bip else "No"}')
+                            if bip:
+                                print(f'  Part A:  {sorted(A)}')
+                                print(f'  Part B:  {sorted(B)}')
+                        case 9:
+                            v_raw = input('  Start vertex: ').strip()
+                            try: v = int(v_raw)
+                            except: v = v_raw
+                            print(f'\n  BFS order:  {Discrete.BFS(adj, v)}')
+                        case 10:
+                            v_raw = input('  Start vertex: ').strip()
+                            try: v = int(v_raw)
+                            except: v = v_raw
+                            print(f'\n  DFS order:  {Discrete.DFS(adj, v)}')
+                        case 11:
+                            s_raw = input('  Start vertex: ').strip()
+                            e_raw = input('  End vertex: ').strip()
+                            try: s = int(s_raw)
+                            except: s = s_raw
+                            try: e = int(e_raw)
+                            except: e = e_raw
+                            dist, path = Discrete.ShortestPath(adj, s, e)
+                            if not path:
+                                print(f'\n  No path from {s} to {e}.')
+                            else:
+                                print(f'\n  Distance:  {dist}')
+                                print(f'  Path:      {" → ".join(str(v) for v in path)}')
+                        case 12:
+                            edges    = [(w, u, v) for u, neighbors in adj.items() for v, w in neighbors if u < v]
+                            vertices = set(adj.keys())
+                            weight, mst = Discrete.MinimumSpanningTree(edges, vertices)
+                            print(f'\n  MST total weight:  {weight}')
+                            print(f'  MST edges:')
+                            for u, v, w in mst:
+                                print(f'    {u} — {v}  (weight {w})')
+                        case 13:
+                            coloring = Discrete.GreedyColoring(adj)
+                            print('\n  Vertex colouring:')
+                            for v, c in sorted(coloring.items()):
+                                print(f'    vertex {v}  →  colour {c}')
+                        case 14:
+                            print(f'\n  Chromatic number bound:  {Discrete.ChromaticNumberBound(adj)}')
+                        case _: print('  That was not a valid option.')
+
+                # ── Section 9: Trees ──────────────────────────────────────────
+                elif sec == 9:
+                    if choice in (1,):
+                        adj = _ask_graph(weighted=False)
+                    elif choice in (2, 3, 4, 5, 6):
+                        print('  Enter children as  parent:child1,child2  per line. Blank to finish.')
+                        children, nodes = _ask_children()
+                        root_raw = input('  Root node: ').strip()
+                        try: root = int(root_raw)
+                        except: root = root_raw
+                    elif choice == 7:
+                        pass  # just needs n
+                    elif choice in (8,):
+                        print('  Enter edges as  u,v  pairs (space-separated): ', end='')
+                        raw = input().strip().split()
+                        edges_tree = []
+                        for pair in raw:
+                            a, b = pair.split(',')
+                            try: a = int(a)
+                            except: pass
+                            try: b = int(b)
+                            except: pass
+                            edges_tree.append((a, b))
+                        n_tree = _ask_int('n  (number of vertices, labeled 1 to n)')
+                    elif choice == 9:
+                        print('  Enter Prüfer sequence (space-separated): ', end='')
+                        prufer = [int(x) for x in input().strip().split()]
+                    match choice:
+                        case 1:
+                            print(f'\n  Is tree:  {"Yes" if Discrete.IsTree(adj) else "No"}')
+                        case 2:
+                            h = Discrete.TreeHeight(children, root)
+                            print(f'\n  Height:  {h}')
+                        case 3:
+                            leaves = Discrete.TreeLeaves(children, nodes)
+                            print(f'\n  Leaves:  {sorted(leaves)}')
+                        case 4:
+                            order = Discrete.PreorderTraversal(children, root)
+                            print(f'\n  Preorder:  {order}')
+                        case 5:
+                            order = Discrete.PostorderTraversal(children, root)
+                            print(f'\n  Postorder:  {order}')
+                        case 6:
+                            order = Discrete.InorderTraversal(children, root)
+                            print(f'\n  Inorder:  {order}')
+                        case 7:
+                            n = _ask_int('n  (number of labeled vertices)')
+                            print(f'\n  Labeled trees on {n} vertices  (nⁿ⁻²):  {Discrete.NumberOfLabeledTrees(n)}')
+                        case 8:
+                            seq = Discrete.PruferSequence(edges_tree, n_tree)
+                            print(f'\n  Prüfer sequence:  {seq}')
+                        case 9:
+                            edges_out = Discrete.PruferToTree(prufer)
+                            print(f'\n  Reconstructed edges:')
+                            for u, v in edges_out:
+                                print(f'    {u} — {v}')
+                        case _: print('  That was not a valid option.')
+
+                # ── Section 10: Boolean Algebra ───────────────────────────────
+                elif sec == 10:
+                    if choice in (1,2,4,5,6,7,8):
+                        a = bool(int(input('  a (1=True, 0=False): ')))
+                        b = bool(int(input('  b (1=True, 0=False): ')))
+                    elif choice == 3:
+                        a = bool(int(input('  a (1=True, 0=False): ')))
+                    match choice:
+                        case 1:  print(f'\n  a ∧ b  =  {Discrete.BoolAnd(a,b)}')
+                        case 2:  print(f'\n  a ∨ b  =  {Discrete.BoolOr(a,b)}')
+                        case 3:  print(f'\n  ¬a     =  {Discrete.BoolNot(a)}')
+                        case 4:  print(f'\n  NAND   =  {Discrete.BoolNand(a,b)}')
+                        case 5:  print(f'\n  NOR    =  {Discrete.BoolNor(a,b)}')
+                        case 6:  print(f'\n  XOR    =  {Discrete.BoolXor(a,b)}')
+                        case 7:  print(f'\n  XNOR   =  {Discrete.BoolXnor(a,b)}')
+                        case 8:  print(f'\n  a → b  =  {Discrete.BoolImplies(a,b)}')
+                        case 9:
+                            n = _ask_int('n_vars  (number of variables)')
+                            print('  Minterms (row numbers where output=1, space-sep): ', end='')
+                            minterms = [int(x) for x in input().strip().split()]
+                            table = [(a, i in minterms) for i, a in enumerate(
+                                __import__('itertools').product([False,True], repeat=n))]
+                            print(f'\n  DNF:  {Discrete.ToDNF(table)}')
+                        case 10:
+                            n = _ask_int('n_vars  (number of variables)')
+                            print('  Maxterms (row numbers where output=0, space-sep): ', end='')
+                            maxterms = [int(x) for x in input().strip().split()]
+                            table = [(a, i not in maxterms) for i, a in enumerate(
+                                __import__('itertools').product([False,True], repeat=n))]
+                            print(f'\n  CNF:  {Discrete.ToCNF(table)}')
+                        case 11:
+                            n = _ask_int('n_vars')
+                            print('  Minterms (space-sep): ', end='')
+                            minterms = [int(x) for x in input().strip().split()]
+                            pis = Discrete.QuineMcCluskey(minterms, n)
+                            print(f'\n  Prime implicants ({len(pis)} found):')
+                            for term, mask, covered in sorted(pis, key=lambda x: sorted(x[2])):
+                                print(f'    term={bin(term)}  mask={bin(mask)}  covers={sorted(covered)}')
+                        case _: print('  That was not a valid option.')
+
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+            except Exception as e:
+                print(f'\n  Error: {e}')
+            print()
+
+# ============================================================
+# LINEAR ALGEBRA DEBUG
+# ============================================================
+
+def LinearAlgebraDebug():
+    SECTIONS = [
+        'Vectors', 'Matrix Operations', 'Matrix Properties',
+        'Determinants', 'Matrix Inverse', 'Linear Systems',
+        'Eigenvalues', 'Vector Spaces', 'Orthogonality', 'Decompositions',
+    ]
+    def _vec():
+        return [float(x) for x in _ask('  Vector components (space-sep): ', cast=str).split()]
+    def _mat():
+        r = _ask('  Rows: ', cast=int)
+        c = _ask('  Cols: ', cast=int)
+        return [[float(x) for x in _ask(f'  Row {i+1} (space-sep): ', cast=str).split()] for i in range(r)]
+    def _sq():
+        n = _ask('  Size n (n×n): ', cast=int)
+        return [[float(x) for x in _ask(f'  Row {i+1} (space-sep): ', cast=str).split()] for i in range(n)]
+    while True:
+        _SectionHeader('Linear Algebra', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i:>2})  {s}')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+        while True:
+            _SectionHeader('Linear Algebra', SECTIONS[sec - 1])
+            if sec == 1:
+                print('  (1)  Add  (2)  Subtract  (3)  Scale  (4)  Dot product')
+                print('  (5)  Cross product  (6)  Magnitude  (7)  Normalize')
+                print('  (8)  Angle between vectors  (9)  Are orthogonal?')
+            elif sec == 2:
+                print('  (1)  Add  (2)  Subtract  (3)  Scalar multiply')
+                print('  (4)  Matrix × matrix  (5)  Matrix × vector')
+                print('  (6)  Transpose  (7)  Trace')
+            elif sec == 3:
+                print('  (1)  Is square?  (2)  Is symmetric?  (3)  Is diagonal?')
+                print('  (4)  Is identity?  (5)  Is upper triangular?')
+                print('  (6)  Is lower triangular?  (7)  Is orthogonal?  (8)  Rank')
+            elif sec == 4:
+                print('  (1)  Determinant  (2)  Cofactor matrix  (3)  Adjugate')
+            elif sec == 5:
+                print('  (1)  Inverse  (2)  Is invertible?  (3)  Pseudoinverse')
+            elif sec == 6:
+                print('  (1)  Solve Ax=b  (2)  RREF  (3)  Null space  (4)  Column space basis')
+            elif sec == 7:
+                print('  (1)  Eigenvalues (2×2)  (2)  Characteristic polynomial  (3)  Is diagonalizable?')
+            elif sec == 8:
+                print('  (1)  Is v in span?  (2)  Linearly independent?  (3)  Is basis?  (4)  Dimension')
+            elif sec == 9:
+                print('  (1)  Gram-Schmidt  (2)  Project v onto u  (3)  Project onto subspace  (4)  Orthogonal?')
+            elif sec == 10:
+                print('  (1)  LU decomposition  (2)  QR decomposition  (3)  Cholesky  (4)  Singular values')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
+            try:
+                if sec == 1:
+                    a = _vec()
+                    match choice:
+                        case 1:
+                            b = _vec()
+                            print(f'\n  Result: {LinAlg.VectorAdd(a, b)}')
+                        case 2:
+                            b = _vec()
+                            print(f'\n  Result: {LinAlg.VectorSub(a, b)}')
+                        case 3:
+                            k = _ask('  Scalar: ', cast=float)
+                            print(f'\n  Result: {LinAlg.VectorScale(k, a)}')
+                        case 4:
+                            b = _vec()
+                            print(f'\n  Dot product: {LinAlg.DotProduct(a, b):.6f}')
+                        case 5:
+                            b = _vec()
+                            print(f'\n  Cross product: {LinAlg.CrossProduct(a, b)}')
+                        case 6:
+                            print(f'\n  Magnitude: {LinAlg.VectorMagnitude(a):.6f}')
+                        case 7:
+                            print(f'\n  Unit vector: {LinAlg.VectorNormalize(a)}')
+                        case 8:
+                            b = _vec()
+                            print(f'\n  Angle: {LinAlg.AngleBetweenVectors(a, b):.4f}°')
+                        case 9:
+                            b = _vec()
+                            print(f'\n  Orthogonal: {LinAlg.AreOrthogonal(a, b)}')
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+                elif sec == 2:
+                    match choice:
+                        case 1:
+                            A = _mat(); B = _mat()
+                            r = LinAlg.MatrixAdd(A, B)
+                            print('\n  Result:')
+                            for row in r: print(f'    {row}')
+                        case 2:
+                            A = _mat(); B = _mat()
+                            r = LinAlg.MatrixSub(A, B)
+                            print('\n  Result:')
+                            for row in r: print(f'    {row}')
+                        case 3:
+                            k = _ask('  Scalar: ', cast=float); A = _mat()
+                            r = LinAlg.MatrixScale(k, A)
+                            print('\n  Result:')
+                            for row in r: print(f'    {row}')
+                        case 4:
+                            A = _mat(); B = _mat()
+                            r = LinAlg.MatrixMul(A, B)
+                            print('\n  Result:')
+                            for row in r: print(f'    {row}')
+                        case 5:
+                            A = _mat(); v = _vec()
+                            print(f'\n  Result: {LinAlg.MatrixVectorMul(A, v)}')
+                        case 6:
+                            A = _mat()
+                            r = LinAlg.Transpose(A)
+                            print('\n  Transpose:')
+                            for row in r: print(f'    {row}')
+                        case 7:
+                            A = _sq()
+                            print(f'\n  Trace: {LinAlg.Trace(A):.6f}')
+                        case _:
+                            print('\n  That was not a valid option.')
+                            continue
+                elif sec == 3:
+                    A = _sq()
+                    match choice:
+                        case 1: print(f'\n  Is square: {LinAlg.IsSquare(A)}')
+                        case 2: print(f'\n  Is symmetric: {LinAlg.IsSymmetric(A)}')
+                        case 3: print(f'\n  Is diagonal: {LinAlg.IsDiagonal(A)}')
+                        case 4: print(f'\n  Is identity: {LinAlg.IsIdentity(A)}')
+                        case 5: print(f'\n  Is upper triangular: {LinAlg.IsUpperTriangular(A)}')
+                        case 6: print(f'\n  Is lower triangular: {LinAlg.IsLowerTriangular(A)}')
+                        case 7: print(f'\n  Is orthogonal: {LinAlg.IsOrthogonal(A)}')
+                        case 8: print(f'\n  Rank: {LinAlg.Rank(A)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 4:
+                    A = _sq()
+                    match choice:
+                        case 1:
+                            print(f'\n  Determinant: {LinAlg.Determinant(A):.6f}')
+                        case 2:
+                            r = LinAlg.CofactorMatrix(A)
+                            print('\n  Cofactor matrix:')
+                            for row in r: print(f'    {row}')
+                        case 3:
+                            r = LinAlg.Adjugate(A)
+                            print('\n  Adjugate:')
+                            for row in r: print(f'    {row}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 5:
+                    A = _sq()
+                    match choice:
+                        case 1:
+                            r = LinAlg.MatrixInverse(A)
+                            if r is None:
+                                print('\n  Matrix is not invertible.')
+                            else:
+                                print('\n  Inverse:')
+                                for row in r: print(f'    {[round(x,6) for x in row]}')
+                        case 2:
+                            print(f'\n  Is invertible: {LinAlg.IsInvertible(A)}')
+                        case 3:
+                            r = LinAlg.Pseudoinverse(A)
+                            print('\n  Pseudoinverse:')
+                            for row in r: print(f'    {[round(x,6) for x in row]}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 6:
+                    match choice:
+                        case 1:
+                            A = _mat(); b = _vec()
+                            r = LinAlg.GaussianElimination(A, b)
+                            print(f'\n  Solution x: {r}')
+                        case 2:
+                            A = _mat()
+                            r = LinAlg.RREF(A)
+                            print('\n  RREF:')
+                            for row in r: print(f'    {row}')
+                        case 3:
+                            A = _mat()
+                            r = LinAlg.NullSpace(A)
+                            print('\n  Null space basis:')
+                            for v in r: print(f'    {v}')
+                        case 4:
+                            A = _mat()
+                            r = LinAlg.ColumnSpaceBasis(A)
+                            print('\n  Column space basis:')
+                            for v in r: print(f'    {v}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 7:
+                    A = _sq()
+                    match choice:
+                        case 1:
+                            print(f'\n  Eigenvalues: {LinAlg.Eigenvalues2x2(A)}')
+                        case 2:
+                            print(f'\n  Char. polynomial: {LinAlg.CharacteristicPolynomial(A)}')
+                        case 3:
+                            print(f'\n  Is diagonalizable: {LinAlg.IsDiagonalizable(A)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 8:
+                    match choice:
+                        case 1:
+                            v = _vec()
+                            print('  Span vectors (blank line to finish):')
+                            S = []
+                            while True:
+                                raw = input('  > ').strip()
+                                if not raw: break
+                                S.append([float(x) for x in raw.split()])
+                            print(f'\n  In span: {LinAlg.IsInSpan(v, S)}')
+                        case 2:
+                            print('  Vectors (blank line to finish):')
+                            S = []
+                            while True:
+                                raw = input('  > ').strip()
+                                if not raw: break
+                                S.append([float(x) for x in raw.split()])
+                            print(f'\n  Linearly independent: {LinAlg.AreLinearlyIndependent(S)}')
+                        case 3:
+                            n = _ask('  Space dimension: ', cast=int)
+                            print('  Basis vectors (blank line to finish):')
+                            S = []
+                            while True:
+                                raw = input('  > ').strip()
+                                if not raw: break
+                                S.append([float(x) for x in raw.split()])
+                            print(f'\n  Is basis: {LinAlg.IsBasis(S, n)}')
+                        case 4:
+                            A = _mat()
+                            print(f'\n  Dimension (rank): {LinAlg.Rank(A)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 9:
+                    match choice:
+                        case 1:
+                            print('  Vectors for Gram-Schmidt (blank line to finish):')
+                            S = []
+                            while True:
+                                raw = input('  > ').strip()
+                                if not raw: break
+                                S.append([float(x) for x in raw.split()])
+                            r = LinAlg.GramSchmidt(S)
+                            print('\n  Orthonormal basis:')
+                            for v in r: print(f'    {[round(x, 6) for x in v]}')
+                        case 2:
+                            v = _vec(); u = _vec()
+                            print(f'\n  proj_u(v) = {[round(x,6) for x in LinAlg.VectorProjection(v, u)]}')
+                        case 3:
+                            v = _vec()
+                            print('  Subspace basis vectors (blank line to finish):')
+                            S = []
+                            while True:
+                                raw = input('  > ').strip()
+                                if not raw: break
+                                S.append([float(x) for x in raw.split()])
+                            r = LinAlg.ProjectOntoSubspace(v, S)
+                            print(f'\n  Projection: {[round(x,6) for x in r]}')
+                        case 4:
+                            a = _vec(); b = _vec()
+                            print(f'\n  Orthogonal: {LinAlg.AreOrthogonal(a, b)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 10:
+                    A = _sq()
+                    match choice:
+                        case 1:
+                            L, U = LinAlg.LUDecomposition(A)
+                            print('\n  L:')
+                            for row in L: print(f'    {[round(x,6) for x in row]}')
+                            print('  U:')
+                            for row in U: print(f'    {[round(x,6) for x in row]}')
+                        case 2:
+                            Q, R = LinAlg.QRDecomposition(A)
+                            print('\n  Q:')
+                            for row in Q: print(f'    {[round(x,6) for x in row]}')
+                            print('  R:')
+                            for row in R: print(f'    {[round(x,6) for x in row]}')
+                        case 3:
+                            r = LinAlg.CholeskyDecomposition(A)
+                            if r is None:
+                                print('\n  Matrix is not positive definite.')
+                            else:
+                                print('\n  Cholesky L:')
+                                for row in r: print(f'    {[round(x,6) for x in row]}')
+                        case 4:
+                            sv = LinAlg.SingularValues(A)
+                            print(f'\n  Singular values: {[round(s,6) for s in sv]}')
+                        case _: print('\n  That was not a valid option.'); continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except Exception as e:
+                print(f'\n  Error: {e}')
+                print()
+                continue
+            print()
+
+# ============================================================
+# DIFFERENTIAL GEOMETRY DEBUG
+# ============================================================
+
+def DifferentialGeometryDebug():
+    import math as _m
+    SECTIONS = [
+        'Curves in ℝ³', 'Frenet-Serret Frame', 'Parametric Surfaces',
+        'First Fundamental Form', 'Second Fundamental Form', 'Surface Curvature',
+        'Christoffel Symbols', 'Geodesics', 'Differential Forms', 'Special Surfaces',
+    ]
+    _CURVES = {
+        '1': ('Helix  (cos t, sin t, t)',    lambda t: [_m.cos(t), _m.sin(t), t]),
+        '2': ('Circle (cos t, sin t, 0)',    lambda t: [_m.cos(t), _m.sin(t), 0.0]),
+        '3': ('Parabola (t, t², 0)',         lambda t: [t, t * t, 0.0]),
+    }
+    _SURFS = {
+        '1': ('Unit sphere',        lambda u, v: [_m.sin(u)*_m.cos(v), _m.sin(u)*_m.sin(v), _m.cos(u)]),
+        '2': ('Torus  R=2 a=1',     lambda u, v: [(2+_m.cos(v))*_m.cos(u), (2+_m.cos(v))*_m.sin(u), _m.sin(v)]),
+        '3': ('Paraboloid z=u²+v²', lambda u, v: [u, v, u*u + v*v]),
+        '4': ('Saddle  z=u²-v²',    lambda u, v: [u, v, u*u - v*v]),
+    }
+    def _curve():
+        for k, (n, _) in _CURVES.items(): print(f'    ({k})  {n}')
+        return _CURVES.get(_ask('  Curve (1-3): ', cast=str).strip(), _CURVES['1'])[1]
+    def _surf():
+        for k, (n, _) in _SURFS.items(): print(f'    ({k})  {n}')
+        return _SURFS.get(_ask('  Surface (1-4): ', cast=str).strip(), _SURFS['1'])[1]
+    while True:
+        _SectionHeader('Differential Geometry', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i:>2})  {s}')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+        while True:
+            _SectionHeader('Differential Geometry', SECTIONS[sec - 1])
+            if sec == 1:
+                print('  (1)  Tangent vector γ\'(t)    (2)  Speed ‖γ\'(t)‖')
+                print('  (3)  Acceleration γ\'\'(t)    (4)  Curvature κ(t)')
+                print('  (5)  Radius of curvature    (6)  Torsion τ(t)')
+                print('  (7)  Arc length ∫ₐᵇ ‖γ\'‖ dt')
+            elif sec == 2:
+                print('  (1)  Frenet-Serret frame (T, N, B)')
+                print('  (2)  Osculating plane')
+                print('  (3)  Osculating circle')
+                print('  (4)  Total curvature and torsion over [a, b]')
+            elif sec == 3:
+                print('  (1)  Tangent vectors r_u, r_v    (2)  Surface normal N')
+                print('  (3)  Unit normal n̂              (4)  Area element ‖r_u × r_v‖')
+                print('  (5)  Surface area ∫∫ dA')
+            elif sec == 4:
+                print('  (1)  E, F, G     (2)  Metric tensor')
+                print('  (3)  ds²         (4)  Angle between coordinate curves')
+                print('  (5)  √(EG - F²)')
+            elif sec == 5:
+                print('  (1)  L, M, N     (2)  Normal curvature κ_n')
+                print('  (3)  Shape operator matrix')
+            elif sec == 6:
+                print('  (1)  Gaussian curvature K    (2)  Mean curvature H')
+                print('  (3)  Principal curvatures    (4)  Classify surface point')
+                print('  (5)  Total Gaussian curvature ∫∫ K dA')
+            elif sec == 7:
+                print('  (1)  Christoffel symbols Γᵏᵢⱼ at (u, v)')
+            elif sec == 8:
+                print('  (1)  Geodesic path    (2)  Geodesic length')
+            elif sec == 9:
+                print('  (1)  Exterior derivative of 0-form  df')
+                print('  (2)  Exterior derivative of 1-form  dω')
+                print('  (3)  Line integral ∫_C ω')
+                print('  (4)  Wedge product α ∧ β')
+            elif sec == 10:
+                print('  (1)  Sphere    (2)  Torus    (3)  Cylinder')
+                print('  (4)  Paraboloid    (5)  Saddle    (6)  Gauss-Bonnet check')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
+            try:
+                if sec == 1:
+                    curve = _curve()
+                    t = _ask('  Parameter t: ', cast=float)
+                    match choice:
+                        case 1:
+                            print(f'\n  γ\'(t) = {[round(x,6) for x in DiffGeo.CurveTangentVector(curve, t)]}')
+                        case 2:
+                            print(f'\n  Speed = {DiffGeo.CurveSpeed(curve, t):.6f}')
+                        case 3:
+                            print(f'\n  γ\'\'(t) = {[round(x,6) for x in DiffGeo.CurveAcceleration(curve, t)]}')
+                        case 4:
+                            print(f'\n  κ(t) = {DiffGeo.Curvature(curve, t):.6f}')
+                        case 5:
+                            print(f'\n  ρ(t) = {DiffGeo.RadiusOfCurvature(curve, t):.6f}')
+                        case 6:
+                            print(f'\n  τ(t) = {DiffGeo.Torsion(curve, t):.6f}')
+                        case 7:
+                            a = _ask('  Lower bound a: ', cast=float)
+                            b = _ask('  Upper bound b: ', cast=float)
+                            print(f'\n  Arc length = {DiffGeo.ArcLength(curve, a, b):.6f}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 2:
+                    curve = _curve()
+                    t = _ask('  Parameter t: ', cast=float)
+                    match choice:
+                        case 1:
+                            T, N, B = DiffGeo.FrenetSerretFrame(curve, t)
+                            print(f'\n  T = {[round(x,6) for x in T]}')
+                            print(f'  N = {[round(x,6) for x in N]}')
+                            print(f'  B = {[round(x,6) for x in B]}')
+                        case 2:
+                            B, pt = DiffGeo.OsculatingPlane(curve, t)
+                            print(f'\n  Normal (B) = {[round(x,6) for x in B]}')
+                            print(f'  Base point = {[round(x,6) for x in pt]}')
+                        case 3:
+                            center, rho = DiffGeo.OsculatingCircle(curve, t)
+                            if center is None:
+                                print('\n  Straight segment — no osculating circle.')
+                            else:
+                                print(f'\n  Center = {[round(x,6) for x in center]}')
+                                print(f'  Radius = {rho:.6f}')
+                        case 4:
+                            a = _ask('  a: ', cast=float)
+                            b = _ask('  b: ', cast=float)
+                            tk, tt = DiffGeo.TotalCurvatureAndTorsion(curve, a, b)
+                            print(f'\n  ∫κ ds = {tk:.6f}   ∫τ ds = {tt:.6f}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 3:
+                    S = _surf()
+                    u = _ask('  u: ', cast=float)
+                    v = _ask('  v: ', cast=float)
+                    match choice:
+                        case 1:
+                            ru, rv = DiffGeo.SurfaceTangentVectors(S, u, v)
+                            print(f'\n  r_u = {[round(x,6) for x in ru]}')
+                            print(f'  r_v = {[round(x,6) for x in rv]}')
+                        case 2:
+                            print(f'\n  N = {[round(x,6) for x in DiffGeo.SurfaceNormal(S, u, v)]}')
+                        case 3:
+                            print(f'\n  n̂ = {[round(x,6) for x in DiffGeo.UnitNormal(S, u, v)]}')
+                        case 4:
+                            print(f'\n  dA = {DiffGeo.AreaElement(S, u, v):.6f}')
+                        case 5:
+                            u0 = _ask('  u0: ', cast=float); u1 = _ask('  u1: ', cast=float)
+                            v0 = _ask('  v0: ', cast=float); v1 = _ask('  v1: ', cast=float)
+                            print(f'\n  Surface area = {DiffGeo.SurfaceArea(S, u0, u1, v0, v1):.6f}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 4:
+                    S = _surf()
+                    u = _ask('  u: ', cast=float)
+                    v = _ask('  v: ', cast=float)
+                    match choice:
+                        case 1:
+                            E, F, G = DiffGeo.FirstFundamentalForm(S, u, v)
+                            print(f'\n  E={E:.6f}  F={F:.6f}  G={G:.6f}')
+                        case 2:
+                            mt = DiffGeo.MetricTensor(S, u, v)
+                            print(f'\n  g = {[[round(x,6) for x in row] for row in mt]}')
+                        case 3:
+                            du = _ask('  du: ', cast=float); dv = _ask('  dv: ', cast=float)
+                            print(f'\n  ds² = {DiffGeo.ArcLengthElement(S, u, v, du, dv):.6f}')
+                        case 4:
+                            print(f'\n  Angle = {DiffGeo.AngleBetweenCoordinateCurves(S, u, v):.4f}°')
+                        case 5:
+                            print(f'\n  √(EG-F²) = {DiffGeo.MetricDeterminant(S, u, v):.6f}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 5:
+                    S = _surf()
+                    u = _ask('  u: ', cast=float)
+                    v = _ask('  v: ', cast=float)
+                    match choice:
+                        case 1:
+                            L, M, N = DiffGeo.SecondFundamentalForm(S, u, v)
+                            print(f'\n  L={L:.6f}  M={M:.6f}  N={N:.6f}')
+                        case 2:
+                            du = _ask('  du: ', cast=float); dv = _ask('  dv: ', cast=float)
+                            print(f'\n  κ_n = {DiffGeo.NormalCurvature(S, u, v, du, dv):.6f}')
+                        case 3:
+                            sm = DiffGeo.ShapeOperator(S, u, v)
+                            print(f'\n  Shape operator = {[[round(x,6) for x in row] for row in sm]}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 6:
+                    S = _surf()
+                    u = _ask('  u: ', cast=float)
+                    v = _ask('  v: ', cast=float)
+                    match choice:
+                        case 1: print(f'\n  K = {DiffGeo.GaussianCurvature(S, u, v):.6f}')
+                        case 2: print(f'\n  H = {DiffGeo.MeanCurvature(S, u, v):.6f}')
+                        case 3:
+                            k1, k2 = DiffGeo.PrincipalCurvatures(S, u, v)
+                            print(f'\n  κ₁ = {k1:.6f}   κ₂ = {k2:.6f}')
+                        case 4:
+                            print(f'\n  Point type: {DiffGeo.ClassifySurfacePoint(S, u, v)}')
+                        case 5:
+                            u0=_ask('  u0: ',cast=float); u1=_ask('  u1: ',cast=float)
+                            v0=_ask('  v0: ',cast=float); v1=_ask('  v1: ',cast=float)
+                            print(f'\n  ∫∫ K dA = {DiffGeo.TotalGaussianCurvature(S, u0, u1, v0, v1):.6f}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 7:
+                    S = _surf()
+                    u = _ask('  u: ', cast=float)
+                    v = _ask('  v: ', cast=float)
+                    G3 = DiffGeo.ChristoffelSymbols(S, u, v)
+                    print('\n  Non-zero Γᵏᵢⱼ:')
+                    found = False
+                    for k in range(2):
+                        for i in range(2):
+                            for j in range(2):
+                                val = G3[k][i][j]
+                                if abs(val) > 1e-6:
+                                    print(f'    Γ[{k}][{i}][{j}] = {val:.6f}')
+                                    found = True
+                    if not found:
+                        print('    (all zero at this point)')
+                elif sec == 8:
+                    S = _surf()
+                    match choice:
+                        case 1:
+                            u0=_ask('  u0: ',cast=float); v0=_ask('  v0: ',cast=float)
+                            du=_ask('  Initial du/ds: ',cast=float); dv=_ask('  Initial dv/ds: ',cast=float)
+                            s_max=_ask('  s_max (arc length to trace): ',cast=float)
+                            path = DiffGeo.GeodesicPath(S, u0, v0, du, dv, s_max)
+                            step = max(1, len(path) // 8)
+                            print(f'\n  Geodesic ({len(path)} points):')
+                            for i in range(0, len(path), step):
+                                print(f'    (u,v) = ({path[i][0]:.4f}, {path[i][1]:.4f})')
+                        case 2:
+                            u0=_ask('  u0: ',cast=float); v0=_ask('  v0: ',cast=float)
+                            du=_ask('  du/ds: ',cast=float); dv=_ask('  dv/ds: ',cast=float)
+                            s_max=_ask('  s_max: ',cast=float)
+                            path = DiffGeo.GeodesicPath(S, u0, v0, du, dv, s_max)
+                            print(f'\n  Geodesic length = {DiffGeo.GeodesicLength(S, path):.6f}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 9:
+                    match choice:
+                        case 1:
+                            x=_ask('  x: ',cast=float); y=_ask('  y: ',cast=float); z=_ask('  z: ',cast=float)
+                            r = DiffGeo.ExteriorDerivative0Form(lambda a,b,c: a**2+b**2+c**2, x, y, z)
+                            print(f'\n  df (for f=x²+y²+z²) = {[round(c,6) for c in r]}')
+                        case 2:
+                            x=_ask('  x: ',cast=float); y=_ask('  y: ',cast=float); z=_ask('  z: ',cast=float)
+                            r = DiffGeo.ExteriorDerivative1Form(
+                                lambda a,b,c: b, lambda a,b,c: 0.0, lambda a,b,c: 0.0, x, y, z)
+                            print(f'\n  d(y dx) = {[round(c,6) for c in r]}')
+                        case 3:
+                            curve = _curve()
+                            a=_ask('  a: ',cast=float); b=_ask('  b: ',cast=float)
+                            r = DiffGeo.LineIntegralOf1Form(
+                                lambda a,b,c: b, lambda a,b,c: 0.0, lambda a,b,c: 0.0, curve, a, b)
+                            print(f'\n  ∫_C(y dx) = {r:.6f}')
+                        case 4:
+                            alpha = [_ask(f'  α[{i}]: ', cast=float) for i in range(3)]
+                            beta  = [_ask(f'  β[{i}]: ', cast=float) for i in range(3)]
+                            print(f'\n  α ∧ β = {[round(c,6) for c in DiffGeo.WedgeProduct1Forms(alpha, beta)]}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 10:
+                    match choice:
+                        case 1:
+                            r = _ask('  Radius r: ', cast=float)
+                            _, K, H, area = DiffGeo.Sphere(r)
+                            print(f'\n  K={K:.6f}  H={H:.6f}  Area={area:.6f}')
+                        case 2:
+                            R = _ask('  Major radius R: ', cast=float)
+                            a = _ask('  Tube radius a: ', cast=float)
+                            _, Kf, Hf, area = DiffGeo.Torus(R, a)
+                            u = _ask('  θ: ', cast=float); v = _ask('  φ: ', cast=float)
+                            print(f'\n  Area={area:.6f}  K(θ,φ)={Kf(u,v):.6f}  H(θ,φ)={Hf(u,v):.6f}')
+                        case 3:
+                            r = _ask('  Radius r: ', cast=float)
+                            _, K, H = DiffGeo.Cylinder(r)
+                            print(f'\n  K={K:.6f}  H={H:.6f}')
+                        case 4:
+                            _, Kf, Hf = DiffGeo.Paraboloid()
+                            u=_ask('  u: ',cast=float); v=_ask('  v: ',cast=float)
+                            print(f'\n  K={Kf(u,v):.6f}  H={Hf(u,v):.6f}')
+                        case 5:
+                            _, Kf, Hf = DiffGeo.Saddle()
+                            u=_ask('  u: ',cast=float); v=_ask('  v: ',cast=float)
+                            print(f'\n  K={Kf(u,v):.6f}  H={Hf(u,v):.6f}')
+                        case 6:
+                            total_k = _ask('  ∫∫ K dA: ', cast=float)
+                            chi_f, chi_i = DiffGeo.GaussBonnetCheck(total_k)
+                            print(f'\n  χ = {chi_f:.6f}  (nearest integer: {chi_i})')
+                        case _: print('\n  That was not a valid option.'); continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except Exception as e:
+                print(f'\n  Error: {e}')
+                print()
+                continue
+            print()
+
+# ============================================================
+# ABSTRACT ALGEBRA DEBUG
+# ============================================================
+
+def AbstractAlgebraDebug():
+    SECTIONS = [
+        'Groups', 'Subgroups & Cosets', 'Normal Subgroups & Quotients',
+        'Homomorphisms', 'Permutation Groups', 'Rings',
+        'Ideals', 'Fields', 'Polynomial Rings mod p', 'Group Actions & Burnside',
+    ]
+    def _Zn():
+        return AbsAlg.CyclicGroupZn(_ask('  n for ℤₙ: ', cast=int))
+    def _poly(lbl='f'):
+        raw = _ask(f'  Poly {lbl} coefficients (ascending degree, space-sep): ', cast=str)
+        return [float(x) for x in raw.split()]
+    def _perm():
+        raw = _ask('  Permutation image values (e.g. "2 3 1" for σ(1)=2,σ(2)=3,σ(3)=1): ', cast=str)
+        vals = [int(x) for x in raw.split()]
+        return {i+1: vals[i] for i in range(len(vals))}
+    while True:
+        _SectionHeader('Abstract Algebra', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i:>2})  {s}')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+        while True:
+            _SectionHeader('Abstract Algebra', SECTIONS[sec - 1])
+            if sec == 1:
+                print('  (1)  Is group?  (2)  Is abelian?  (3)  |G|')
+                print('  (4)  Element order ord(g)  (5)  Cyclic subgroup ⟨g⟩')
+                print('  (6)  Generators of ℤₙ  (7)  Cayley table')
+            elif sec == 2:
+                print('  (1)  Is subgroup?  (2)  Left coset aH  (3)  Right coset Ha')
+                print('  (4)  All left cosets  (5)  Lagrange\'s theorem  (6)  Center Z(G)')
+            elif sec == 3:
+                print('  (1)  Is normal subgroup?  (2)  Quotient group G/N')
+                print('  (3)  Commutator [a,b]  (4)  Commutator subgroup [G,G]')
+            elif sec == 4:
+                print('  (1)  Is homomorphism?  (2)  Kernel  (3)  Image')
+                print('  (4)  First Isomorphism Theorem')
+            elif sec == 5:
+                print('  (1)  Symmetric group Sₙ  (2)  Alternating group Aₙ')
+                print('  (3)  Cycle decomposition  (4)  Cycle type  (5)  ord(σ)')
+                print('  (6)  Sign ±1  (7)  Compose σ∘τ  (8)  Inverse σ⁻¹')
+            elif sec == 6:
+                print('  (1)  Is ring?  (2)  Is commutative?  (3)  Unity')
+                print('  (4)  Zero divisors  (5)  Characteristic  (6)  Integral domain?')
+            elif sec == 7:
+                print('  (1)  Is ideal?  (2)  Principal ideal ⟨a⟩')
+                print('  (3)  Is prime ideal?  (4)  Is maximal ideal?')
+            elif sec == 8:
+                print('  (1)  Is field?  (2)  Multiplicative inverse a⁻¹ mod p')
+                print('  (3)  Field characteristic  (4)  Prime subfield')
+            elif sec == 9:
+                print('  (1)  f+g  (2)  f·g  (3)  f÷g  (4)  gcd(f,g)')
+                print('  (5)  f(a) mod p  (6)  Roots of f in 𝔽ₚ  (7)  Is f irreducible?')
+            elif sec == 10:
+                print('  (1)  Orbit of x  (2)  Stabilizer of x  (3)  Orbit-Stabilizer')
+                print('  (4)  All orbits  (5)  Burnside\'s lemma (necklace)')
+                print('  (6)  Conjugacy class  (7)  All conjugacy classes  (8)  Class equation')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
+            try:
+                if sec == 1:
+                    elems, op = _Zn()
+                    ident = AbsAlg._find_identity(elems, op)
+                    match choice:
+                        case 1:
+                            is_g, cl, as_, id_, inv = AbsAlg.IsGroup(elems, op)
+                            print(f'\n  Is group: {is_g}  identity={id_}  closed={cl}  assoc={as_}  inverses={inv}')
+                        case 2: print(f'\n  Is abelian: {AbsAlg.IsAbelian(elems, op)}')
+                        case 3: print(f'\n  |G| = {AbsAlg.GroupOrder(elems)}')
+                        case 4:
+                            g = _ask('  Element g: ', cast=int)
+                            print(f'\n  ord({g}) = {AbsAlg.ElementOrder(g, op, ident)}')
+                        case 5:
+                            g = _ask('  Generator g: ', cast=int)
+                            print(f'\n  ⟨{g}⟩ = {AbsAlg.CyclicSubgroup(g, op, ident)}')
+                        case 6:
+                            print(f'\n  Generators: {AbsAlg.Generators(elems, op, ident)}')
+                        case 7:
+                            tbl = AbsAlg.CayleyTable(elems, op)
+                            print(f'\n  Cayley table (elements: {elems}):')
+                            for row in tbl: print(f'    {row}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 2:
+                    elems, op = _Zn()
+                    ident = AbsAlg._find_identity(elems, op)
+                    H = [int(x) for x in _ask('  Subgroup H elements (space-sep): ', cast=str).split()]
+                    match choice:
+                        case 1: print(f'\n  Is subgroup: {AbsAlg.IsSubgroup(H, elems, op, ident)}')
+                        case 2:
+                            a = _ask('  a: ', cast=int)
+                            print(f'\n  aH = {AbsAlg.LeftCoset(a, H, op)}')
+                        case 3:
+                            a = _ask('  a: ', cast=int)
+                            print(f'\n  Ha = {AbsAlg.RightCoset(H, a, op)}')
+                        case 4:
+                            print('\n  All left cosets:')
+                            for c in AbsAlg.AllLeftCosets(elems, H, op): print(f'    {c}')
+                        case 5:
+                            idx, div = AbsAlg.LagrangesTheorem(elems, H)
+                            print(f'\n  [G:H] = {idx}   |H| divides |G|: {div}')
+                        case 6:
+                            print(f'\n  Z(G) = {AbsAlg.Center(elems, op)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 3:
+                    elems, op = _Zn()
+                    ident = AbsAlg._find_identity(elems, op)
+                    N = [int(x) for x in _ask('  Normal subgroup N elements (space-sep): ', cast=str).split()]
+                    match choice:
+                        case 1:
+                            print(f'\n  Is normal: {AbsAlg.IsNormalSubgroup(N, elems, op, ident)}')
+                        case 2:
+                            cosets, cop = AbsAlg.QuotientGroup(elems, N, op, ident)
+                            if cosets is None:
+                                print('\n  N is not a normal subgroup — quotient undefined.')
+                            else:
+                                print(f'\n  G/N has {len(cosets)} cosets:')
+                                for c in cosets: print(f'    {c}')
+                        case 3:
+                            a = _ask('  a: ', cast=int); b = _ask('  b: ', cast=int)
+                            pairs = AbsAlg._inverses_map(elems, op, ident)
+                            print(f'\n  [a,b] = {AbsAlg.Commutator(a, b, op, pairs)}')
+                        case 4:
+                            print(f'\n  [G,G] = {AbsAlg.CommutatorSubgroup(elems, op, ident)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 4:
+                    n = _ask('  n (source ℤₙ): ', cast=int)
+                    m = _ask('  m (target ℤₘ): ', cast=int)
+                    eG, opG = AbsAlg.CyclicGroupZn(n)
+                    eH, opH = AbsAlg.CyclicGroupZn(m)
+                    phi = {x: x % m for x in eG}
+                    id_H = AbsAlg._find_identity(eH, opH)
+                    match choice:
+                        case 1:
+                            print(f'\n  Is homomorphism (x mod {m}): {AbsAlg.IsHomomorphism(eG, eH, phi, opG, opH)}')
+                        case 2:
+                            print(f'\n  ker(φ) = {sorted(AbsAlg.Kernel(phi, id_H))}')
+                        case 3:
+                            print(f'\n  im(φ) = {sorted(AbsAlg.Image(phi))}')
+                        case 4:
+                            ker, img, idx = AbsAlg.FirstIsomorphismTheorem(eG, phi, opG, id_H)
+                            print(f'\n  ker={sorted(ker)}   im={sorted(img)}   |G/ker|={idx}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 5:
+                    n = _ask('  n for Sₙ (≤5 recommended): ', cast=int)
+                    match choice:
+                        case 1:
+                            S = AbsAlg.SymmetricGroup(n)
+                            print(f'\n  |S{n}| = {len(S)}  (first 6):')
+                            for s in S[:6]: print(f'    {dict(s)}')
+                        case 2:
+                            A = AbsAlg.AlternatingGroup(n)
+                            print(f'\n  |A{n}| = {len(A)}  (first 6):')
+                            for s in A[:6]: print(f'    {dict(s)}')
+                        case 3:
+                            sigma = _perm()
+                            print(f'\n  Cycles: {AbsAlg.CycleDecomposition(sigma)}')
+                        case 4:
+                            sigma = _perm()
+                            print(f'\n  Cycle type: {AbsAlg.CycleType(sigma)}')
+                        case 5:
+                            sigma = _perm()
+                            print(f'\n  ord(σ) = {AbsAlg.PermOrder(sigma)}')
+                        case 6:
+                            sigma = _perm()
+                            print(f'\n  sgn(σ) = {AbsAlg.PermSign(sigma)}')
+                        case 7:
+                            sigma = _perm(); tau = _perm()
+                            print(f'\n  σ∘τ = {dict(AbsAlg.PermCompose(sigma, tau))}')
+                        case 8:
+                            sigma = _perm()
+                            print(f'\n  σ⁻¹ = {dict(AbsAlg.PermInverse(sigma))}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 6:
+                    elems, add, mul = AbsAlg.RingZn(_ask('  n for ℤₙ: ', cast=int))
+                    match choice:
+                        case 1:
+                            is_r, ao, ma, di = AbsAlg.IsRing(elems, add, mul)
+                            print(f'\n  Is ring: {is_r}  (add_ok={ao}, mul_assoc={ma}, distrib={di})')
+                        case 2: print(f'\n  Commutative: {AbsAlg.IsCommutativeRing(elems, mul)}')
+                        case 3: print(f'\n  Unity: {AbsAlg.RingUnity(elems, mul)}')
+                        case 4: print(f'\n  Zero divisors: {AbsAlg.ZeroDivisors(elems, add, mul)}')
+                        case 5:
+                            unity = AbsAlg.RingUnity(elems, mul)
+                            print(f'\n  char(R) = {AbsAlg.RingCharacteristic(elems, add, unity)}')
+                        case 6: print(f'\n  Integral domain: {AbsAlg.IsIntegralDomain(elems, add, mul)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 7:
+                    n = _ask('  n for ℤₙ: ', cast=int)
+                    elems, add, mul = AbsAlg.RingZn(n)
+                    zero = AbsAlg._find_identity(elems, add)
+                    I = [int(x) for x in _ask('  Ideal I elements (space-sep): ', cast=str).split()]
+                    match choice:
+                        case 1: print(f'\n  Is ideal: {AbsAlg.IsIdeal(I, elems, add, mul, zero)}')
+                        case 2:
+                            a = _ask('  Generator a: ', cast=int)
+                            print(f'\n  ⟨{a}⟩ = {AbsAlg.PrincipalIdeal(a, elems, mul)}')
+                        case 3: print(f'\n  Is prime ideal: {AbsAlg.IsPrimeIdeal(I, elems, mul)}')
+                        case 4: print(f'\n  Is maximal ideal: {AbsAlg.IsMaximalIdeal(I, elems, add, mul, zero)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 8:
+                    p = _ask('  Prime p: ', cast=int)
+                    fe, fa, fm = AbsAlg.PrimeField(p)
+                    match choice:
+                        case 1:
+                            is_f, *_ = AbsAlg.IsField(fe, fa, fm)
+                            print(f'\n  𝔽_{p} is field: {is_f}')
+                        case 2:
+                            a = _ask('  a: ', cast=int)
+                            print(f'\n  {a}⁻¹ mod {p} = {AbsAlg.FieldInverse(a, p)}')
+                        case 3: print(f'\n  char(𝔽_{p}) = {AbsAlg.FieldCharacteristic(fe, fa, fm)}')
+                        case 4: print(f'\n  Prime subfield: {AbsAlg.PrimeSubfield(fe, fa, fm)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 9:
+                    p = _ask('  Prime p: ', cast=int)
+                    f = _poly('f'); g = _poly('g')
+                    match choice:
+                        case 1: print(f'\n  f+g = {AbsAlg.PolyAdd(f, g, p)}')
+                        case 2: print(f'\n  f·g = {AbsAlg.PolyMul(f, g, p)}')
+                        case 3:
+                            q, r = AbsAlg.PolyDivMod(f, g, p)
+                            print(f'\n  q = {q}   r = {r}')
+                        case 4: print(f'\n  gcd(f,g) = {AbsAlg.PolyGCD(f, g, p)}')
+                        case 5:
+                            a = _ask('  a: ', cast=int)
+                            print(f'\n  f({a}) mod {p} = {AbsAlg.PolyEval(f, a, p)}')
+                        case 6: print(f'\n  Roots of f in 𝔽_{p}: {AbsAlg.PolyRoots(f, p)}')
+                        case 7: print(f'\n  Irreducible over 𝔽_{p}: {AbsAlg.IsIrreducible(f, p)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 10:
+                    match choice:
+                        case 1 | 2 | 3 | 4:
+                            elems, op = _Zn()
+                            ident = AbsAlg._find_identity(elems, op)
+                            x = _ask('  Element x: ', cast=int)
+                            act = lambda g, xv: op(g, xv)
+                            if choice == 1:
+                                print(f'\n  Orbit({x}) = {AbsAlg.Orbit(x, elems, act)}')
+                            elif choice == 2:
+                                print(f'\n  Stabilizer({x}) = {AbsAlg.Stabilizer(x, elems, act)}')
+                            elif choice == 3:
+                                o, s, pr, G = AbsAlg.OrbitStabilizerTheorem(x, elems, act)
+                                print(f'\n  |Orb|={o}  |Stab|={s}  product={pr}  |G|={G}')
+                            elif choice == 4:
+                                print('\n  All orbits:')
+                                for orb in AbsAlg.AllOrbits(elems, elems, act):
+                                    print(f'    {orb}')
+                        case 5:
+                            k = _ask('  Bead colors k: ', cast=int)
+                            nb = _ask('  Number of beads n: ', cast=int)
+                            import itertools as _it
+                            X = list(_it.product(range(k), repeat=nb))
+                            G = list(range(nb))
+                            def _ra(r, c):
+                                c = list(c)
+                                for _ in range(r): c = [c[-1]] + c[:-1]
+                                return tuple(c)
+                            n_orb, _ = AbsAlg.BurnsideLemma(X, G, _ra)
+                            print(f'\n  Distinct necklaces ({k} colors, {nb} beads): {n_orb}')
+                        case 6 | 7 | 8:
+                            n = _ask('  n for Sₙ: ', cast=int)
+                            S = AbsAlg.SymmetricGroup(n)
+                            sid = AbsAlg.PermIdentity(n)
+                            if choice == 6:
+                                g = _perm()
+                                pairs = AbsAlg._inverses_map(S, AbsAlg.PermCompose, sid)
+                                cls = AbsAlg.ConjugacyClass(g, S, AbsAlg.PermCompose, pairs)
+                                print(f'\n  Conjugacy class size: {len(cls)}')
+                            elif choice == 7:
+                                cc = AbsAlg.AllConjugacyClasses(S, AbsAlg.PermCompose, sid)
+                                print(f'\n  {len(cc)} conjugacy classes in S{n}:')
+                                for i, c in enumerate(cc, 1): print(f'    Class {i}: size {len(c)}')
+                            elif choice == 8:
+                                n_ord, nc, sizes = AbsAlg.ClassEquation(S, AbsAlg.PermCompose, sid)
+                                print(f'\n  |S{n}|={n_ord}   |Z(S{n})|={nc}   class sizes={sorted(sizes)}')
+                        case _: print('\n  That was not a valid option.'); continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except Exception as e:
+                print(f'\n  Error: {e}')
+                print()
+                continue
+            print()
+
+
+# ============================================================
+# TOPOLOGY DEBUG
+# ============================================================
+
+def TopologyDebug():
+    SECTIONS = [
+        'Topological Spaces', 'Bases & Subbases', 'Continuity & Homeomorphisms',
+        'Separation Axioms', 'Compactness', 'Connectedness',
+        'Metric Topology', 'Simplicial Complexes', 'Homotopy Basics', 'Product & Quotient Topologies',
+    ]
+    def _pts_oss():
+        pts = [int(x) for x in _ask('  Points (space-sep integers, e.g. "1 2 3"): ', cast=str).split()]
+        print('  Open sets — one per line (space-sep elements), blank line to finish:')
+        oss = []
+        while True:
+            raw = input('  > ').strip()
+            if not raw: break
+            oss.append(frozenset(int(x) for x in raw.split()))
+        return pts, oss
+    def _simplices():
+        print('  Simplices — one per line (space-sep vertices), blank line to finish:')
+        simps = []
+        while True:
+            raw = input('  > ').strip()
+            if not raw: break
+            simps.append(frozenset(int(x) for x in raw.split()))
+        return simps
+    while True:
+        _SectionHeader('Topology', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i:>2})  {s}')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+        while True:
+            _SectionHeader('Topology', SECTIONS[sec - 1])
+            if sec == 1:
+                print('  (1)  Verify topology  (2)  Discrete topology  (3)  Indiscrete topology')
+                print('  (4)  Interior of A    (5)  Closure of A       (6)  Boundary of A')
+                print('  (7)  Is A dense?      (8)  List closed sets')
+            elif sec == 2:
+                print('  (1)  Is a collection a base?')
+                print('  (2)  Topology generated by a subbasis')
+                print('  (3)  Neighbourhoods of a point')
+            elif sec == 3:
+                print('  (1)  Is a function continuous?')
+                print('  (2)  Is a function a homeomorphism?')
+            elif sec == 4:
+                print('  (1)  Separation axiom tier  (T0–T4)')
+                print('  (2)  Is T0?  (3)  Is T1?  (4)  Is T2 (Hausdorff)?')
+                print('  (5)  Is T3 (Regular)?  (6)  Is T4 (Normal)?')
+            elif sec == 5:
+                print('  (1)  Is compact?  (2)  Is subset compact?')
+            elif sec == 6:
+                print('  (1)  Is connected?  (2)  Is path-connected?')
+                print('  (3)  Connected components  (4)  Is locally connected?  (5)  π₀(X)')
+            elif sec == 7:
+                print('  (1)  Open ball B(x,r)  (2)  Diameter of a set')
+                print('  (3)  Distance d(x,A)   (4)  Hausdorff distance')
+                print('  (5)  Is Cauchy sequence?')
+            elif sec == 8:
+                print('  (1)  Is simplicial complex?  (2)  f-vector')
+                print('  (3)  Euler characteristic χ  (4)  Betti numbers β₀, β₁, β₂')
+                print('  (5)  Complex dimension       (6)  Star of a vertex')
+                print('  (7)  Link of a vertex')
+            elif sec == 9:
+                print('  (1)  Is graph simply connected?')
+                print('  (2)  π₀  — number of path components')
+            elif sec == 10:
+                print('  (1)  Product topology  (2)  Subspace topology  (3)  Full topology profile')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
+            try:
+                if sec == 1:
+                    pts, oss = _pts_oss()
+                    match choice:
+                        case 1:
+                            is_t, emp, whole, uc, ic = Topo.IsTopology(pts, oss)
+                            print(f'\n  Valid topology: {is_t}')
+                            print(f'  ∅ ∈ τ: {emp}   X ∈ τ: {whole}   ∪-closed: {uc}   ∩-closed: {ic}')
+                        case 2:
+                            _, d_oss = Topo.DiscreteTopology(pts)
+                            print(f'\n  Discrete topology: {len(d_oss)} open sets')
+                        case 3:
+                            _, i_oss = Topo.IndiscreteTopology(pts)
+                            print(f'\n  Indiscrete topology: {[set(u) for u in i_oss]}')
+                        case 4:
+                            A = [int(x) for x in _ask('  Subset A (space-sep): ', cast=str).split()]
+                            print(f'\n  int(A) = {set(Topo.Interior(A, oss))}')
+                        case 5:
+                            A = [int(x) for x in _ask('  Subset A (space-sep): ', cast=str).split()]
+                            print(f'\n  cl(A) = {set(Topo.Closure(A, pts, oss))}')
+                        case 6:
+                            A = [int(x) for x in _ask('  Subset A (space-sep): ', cast=str).split()]
+                            print(f'\n  ∂A = {set(Topo.Boundary(A, pts, oss))}')
+                        case 7:
+                            A = [int(x) for x in _ask('  Subset A (space-sep): ', cast=str).split()]
+                            print(f'\n  Dense: {Topo.IsDense(A, pts, oss)}')
+                        case 8:
+                            closed = Topo.ClosedSets(pts, oss)
+                            print(f'\n  {len(closed)} closed sets:')
+                            for c in closed: print(f'    {set(c)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 2:
+                    pts, oss = _pts_oss()
+                    match choice:
+                        case 1:
+                            print('  Enter base sets (blank to finish):')
+                            base = []
+                            while True:
+                                raw = input('  > ').strip()
+                                if not raw: break
+                                base.append(frozenset(int(x) for x in raw.split()))
+                            print(f'\n  Is base for this topology: {Topo.IsBase(base, oss)}')
+                        case 2:
+                            print('  Enter subbasis sets (blank to finish):')
+                            sub = []
+                            while True:
+                                raw = input('  > ').strip()
+                                if not raw: break
+                                sub.append(frozenset(int(x) for x in raw.split()))
+                            _, gen_oss = Topo.TopologyFromSubbasis(pts, sub)
+                            print(f'\n  Generated topology: {len(gen_oss)} open sets')
+                        case 3:
+                            x = _ask('  Point x: ', cast=int)
+                            nbhds = Topo.Neighbourhoods(x, oss)
+                            print(f'\n  Neighbourhoods of {x}:')
+                            for n in nbhds: print(f'    {set(n)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 3:
+                    print('  Domain topology:'); pts_X, oss_X = _pts_oss()
+                    print('  Codomain topology:'); pts_Y, oss_Y = _pts_oss()
+                    raw = _ask('  f as "x:f(x)" pairs (space-sep, e.g. "1:2 2:3"): ', cast=str)
+                    f = {int(p.split(':')[0]): int(p.split(':')[1]) for p in raw.split()}
+                    match choice:
+                        case 1: print(f'\n  Continuous: {Topo.IsContinuous(f, oss_X, oss_Y)}')
+                        case 2: print(f'\n  Homeomorphism: {Topo.IsHomeomorphism(f, pts_X, oss_X, pts_Y, oss_Y)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 4:
+                    pts, oss = _pts_oss()
+                    match choice:
+                        case 1: print(f'\n  Separation: {Topo.SeparationAxiom(pts, oss)}')
+                        case 2: print(f'\n  T0: {Topo.IsT0(pts, oss)}')
+                        case 3: print(f'\n  T1: {Topo.IsT1(pts, oss)}')
+                        case 4: print(f'\n  T2 (Hausdorff): {Topo.IsHausdorff(pts, oss)}')
+                        case 5: print(f'\n  T3 (Regular): {Topo.IsRegular(pts, oss)}')
+                        case 6: print(f'\n  T4 (Normal): {Topo.IsNormal(pts, oss)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 5:
+                    pts, oss = _pts_oss()
+                    match choice:
+                        case 1: print(f'\n  Compact: {Topo.IsCompact(pts, oss)}')
+                        case 2:
+                            A = [int(x) for x in _ask('  Subset A: ', cast=str).split()]
+                            print(f'\n  A compact: {Topo.IsCompactSubset(A, pts, oss)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 6:
+                    pts, oss = _pts_oss()
+                    match choice:
+                        case 1: print(f'\n  Connected: {Topo.IsConnected(pts, oss)}')
+                        case 2: print(f'\n  Path-connected: {Topo.IsPathConnected(pts, oss)}')
+                        case 3:
+                            comps = Topo.ConnectedComponents(pts, oss)
+                            print(f'\n  {len(comps)} component(s):')
+                            for c in comps: print(f'    {set(c)}')
+                        case 4: print(f'\n  Locally connected: {Topo.IsLocallyConnected(pts, oss)}')
+                        case 5: print(f'\n  π₀(X) = {Topo.Pi0(pts, oss)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 7:
+                    raw = _ask('  Points (numeric, space-sep): ', cast=str)
+                    pts_m = [float(x) for x in raw.split()]
+                    dist = lambda a, b: abs(a - b)
+                    match choice:
+                        case 1:
+                            x = _ask('  Center x: ', cast=float); r = _ask('  Radius r: ', cast=float)
+                            print(f'\n  B({x},{r}) = {sorted(Topo.OpenBall(x, r, pts_m, dist))}')
+                        case 2:
+                            A = [float(x) for x in _ask('  Subset A: ', cast=str).split()]
+                            print(f'\n  diam(A) = {Topo.Diameter(A, dist):.6f}')
+                        case 3:
+                            x = _ask('  Point x: ', cast=float)
+                            A = [float(v) for v in _ask('  Set A: ', cast=str).split()]
+                            print(f'\n  d({x},A) = {Topo.DistanceToSet(x, A, dist):.6f}')
+                        case 4:
+                            A = [float(x) for x in _ask('  Set A: ', cast=str).split()]
+                            B = [float(x) for x in _ask('  Set B: ', cast=str).split()]
+                            print(f'\n  d_H(A,B) = {Topo.HausdorffDistance(A, B, dist):.6f}')
+                        case 5:
+                            seq = [float(x) for x in _ask('  Sequence: ', cast=str).split()]
+                            tol = _ask('  ε: ', cast=float)
+                            print(f'\n  Cauchy: {Topo.IsCauchySequence(seq, dist, tol)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 8:
+                    simps = _simplices()
+                    match choice:
+                        case 1: print(f'\n  Simplicial complex: {Topo.IsSimplicialComplex(simps)}')
+                        case 2:
+                            fv = Topo.FVector(simps)
+                            print(f'\n  f-vector: {fv}')
+                        case 3: print(f'\n  χ = {Topo.EulerCharacteristic(simps)}')
+                        case 4:
+                            b = Topo.BettiNumbers(simps)
+                            print(f'\n  β₀={b["beta0"]}  β₁={b["beta1"]}  β₂={b["beta2"]}  χ={b["chi"]}')
+                        case 5: print(f'\n  dim(Δ) = {Topo.ComplexDimension(simps)}')
+                        case 6:
+                            v = _ask('  Vertex v: ', cast=int)
+                            print(f'\n  Star({v}):')
+                            for s in Topo.Star(v, simps): print(f'    {set(s)}')
+                        case 7:
+                            v = _ask('  Vertex v: ', cast=int)
+                            print(f'\n  Link({v}):')
+                            for s in Topo.Link(v, simps): print(f'    {set(s)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 9:
+                    pts, oss = _pts_oss()
+                    match choice:
+                        case 1:
+                            raw = _ask('  Adjacency as "v:nbrs" (e.g. "1:2,3 2:1 3:1"): ', cast=str)
+                            adj = {}
+                            for token in raw.split():
+                                v, ns = token.split(':')
+                                adj[int(v)] = set(int(x) for x in ns.split(',') if x)
+                            print(f'\n  Simply connected: {Topo.IsSimplyConnected(adj)}')
+                        case 2:
+                            print(f'\n  π₀(X) = {Topo.Pi0(pts, oss)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 10:
+                    match choice:
+                        case 1:
+                            print('  Space X:'); pts_X, oss_X = _pts_oss()
+                            print('  Space Y:'); pts_Y, oss_Y = _pts_oss()
+                            pp, po = Topo.ProductTopology(pts_X, oss_X, pts_Y, oss_Y)
+                            print(f'\n  Product space: {len(pp)} points, {len(po)} open sets')
+                        case 2:
+                            pts, oss = _pts_oss()
+                            A = [int(x) for x in _ask('  Subspace A: ', cast=str).split()]
+                            _, sub_oss = Topo.SubspaceTopology(A, oss)
+                            print(f'\n  Subspace topology: {len(sub_oss)} open sets')
+                            for u in sub_oss: print(f'    {set(u)}')
+                        case 3:
+                            pts, oss = _pts_oss()
+                            profile = Topo.TopologyProfile(pts, oss)
+                            print()
+                            for k, v in profile.items():
+                                print(f'  {k}: {v}')
+                        case _: print('\n  That was not a valid option.'); continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except Exception as e:
+                print(f'\n  Error: {e}')
+                print()
+                continue
+            print()
+
+
+# ============================================================
+# ALGEBRAIC GEOMETRY DEBUG
+# ============================================================
+
+def AlgebraicGeometryDebug():
+    SECTIONS = [
+        'Affine Varieties', 'Polynomial Operations', 'Ideals & Radicals',
+        'Curves in ℝ²', 'Projective Geometry', 'Elliptic Curves',
+        'Singularities', 'Intersection Theory', 'Hilbert & Dimension', 'Common Curves',
+    ]
+    def _p1(lbl='f'):
+        raw = _ask(f'  Poly {lbl} (ascending degree coefficients, space-sep): ', cast=str)
+        return [float(x) for x in raw.split()]
+    def _p2(lbl='f'):
+        print(f'  {lbl}(x,y): enter "i j coeff" lines (blank to finish):')
+        poly = {}
+        while True:
+            raw = input('  > ').strip()
+            if not raw: break
+            i, j, c = raw.split()
+            poly[(int(i), int(j))] = float(c)
+        return poly
+    while True:
+        _SectionHeader('Algebraic Geometry', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i:>2})  {s}')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+        while True:
+            _SectionHeader('Algebraic Geometry', SECTIONS[sec - 1])
+            if sec == 1:
+                print('  (1)  Real roots V(f)  (2)  Variety of ideal V(I)  (3)  Is point on variety?')
+            elif sec == 2:
+                print('  (1)  f+g  (2)  f·g  (3)  f÷g  (4)  gcd  (5)  lcm')
+                print('  (6)  f(a)  (7)  f\'  (8)  deg  (9)  Square-free?  (10) Monic')
+            elif sec == 3:
+                print('  (1)  Resultant  (2)  Discriminant  (3)  Radical √⟨f⟩')
+            elif sec == 4:
+                print('  (1)  Tangent line to implicit curve  (2)  Root multiplicity')
+                print('  (3)  Is smooth point?  (4)  Is singular point?')
+                print('  (5)  Genus g=(d-1)(d-2)/2  (6)  Bezout number d₁·d₂')
+            elif sec == 5:
+                print('  (1)  Cross-ratio of 4 points  (2)  Projective equivalence')
+                print('  (3)  Classify conic')
+            elif sec == 6:
+                print('  (1)  Δ = -16(4a³+27b²)  (2)  j-invariant  (3)  Is point on curve?')
+                print('  (4)  Negate point  (5)  Add P+Q  (6)  Scalar [n]P')
+                print('  (7)  Point order  (8)  All points over 𝔽ₚ  (9)  Hasse interval')
+            elif sec == 7:
+                print('  (1)  Singular locus  (2)  Is node?  (3)  Is cusp?  (4)  Delta-invariant')
+            elif sec == 8:
+                print('  (1)  Intersection multiplicity  (2)  Geometric genus')
+            elif sec == 9:
+                print('  (1)  H(d) Hilbert function  (2)  Hilbert polynomial')
+                print('  (3)  Krull dimension  (4)  Variety degree')
+            elif sec == 10:
+                print('  (1)  Conic  (2)  Elliptic curve poly  (3)  Nodal cubic')
+                print('  (4)  Cuspidal cubic  (5)  Fermat curve xⁿ+yⁿ=1')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
+            try:
+                if sec == 1:
+                    match choice:
+                        case 1:
+                            f = _p1()
+                            print(f'\n  V(f) = {AlgGeo.AffineVariety1D(f)}')
+                        case 2:
+                            n = _ask('  Number of polynomials: ', cast=int)
+                            polys = [_p1(f'f{i+1}') for i in range(n)]
+                            print(f'\n  V(I) = {AlgGeo.AffineVarietyOfIdeal(polys)}')
+                        case 3:
+                            f = _p1(); p = _ask('  Point p: ', cast=float)
+                            print(f'\n  {p} ∈ V(f): {AlgGeo.IsOnVariety(p, f)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 2:
+                    if choice <= 5:
+                        f = _p1('f'); g = _p1('g')
+                        match choice:
+                            case 1: print(f'\n  f+g = {AlgGeo.PolyAdd(f, g)}')
+                            case 2: print(f'\n  f·g = {AlgGeo.PolyMul(f, g)}')
+                            case 3:
+                                q, r = AlgGeo.PolyDivMod(f, g)
+                                print(f'\n  q = {q}\n  r = {r}')
+                            case 4: print(f'\n  gcd = {AlgGeo.PolyGCD(f, g)}')
+                            case 5: print(f'\n  lcm = {AlgGeo.PolyLCM(f, g)}')
+                    else:
+                        f = _p1()
+                        match choice:
+                            case 6:
+                                a = _ask('  a: ', cast=float)
+                                print(f'\n  f({a}) = {AlgGeo.PolyEval(f, a):.6f}')
+                            case 7: print(f'\n  f\' = {AlgGeo.PolynomialDerivative(f)}')
+                            case 8: print(f'\n  deg(f) = {AlgGeo.PolyDegree(f)}')
+                            case 9: print(f'\n  Square-free: {AlgGeo.IsSquareFree(f)}')
+                            case 10: print(f'\n  Monic: {AlgGeo.MakeMonic(f)}')
+                            case _: print('\n  That was not a valid option.'); continue
+                elif sec == 3:
+                    f = _p1('f'); g = _p1('g')
+                    match choice:
+                        case 1: print(f'\n  Res(f,g) = {AlgGeo.Resultant(f, g):.6f}')
+                        case 2: print(f'\n  Δ(f) = {AlgGeo.Discriminant(f):.6f}')
+                        case 3: print(f'\n  √⟨f⟩ = {AlgGeo.RadicalOfPrincipalIdeal(f)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 4:
+                    match choice:
+                        case 1:
+                            f = _p2('f')
+                            x0 = _ask('  x₀: ', cast=float); y0 = _ask('  y₀: ', cast=float)
+                            fx, fy, c = AlgGeo.TangentLineImplicit(f, x0, y0)
+                            print(f'\n  Tangent: {fx:.4f}·x + {fy:.4f}·y = {c:.4f}')
+                        case 2:
+                            f = _p1(); x0 = _ask('  x₀: ', cast=float)
+                            print(f'\n  Multiplicity at {x0}: {AlgGeo.RootMultiplicity(f, x0)}')
+                        case 3:
+                            f = _p2(); x = _ask('  x: ', cast=float); y = _ask('  y: ', cast=float)
+                            print(f'\n  Smooth: {AlgGeo.IsSmoothPoint(f, x, y)}')
+                        case 4:
+                            f = _p2(); x = _ask('  x: ', cast=float); y = _ask('  y: ', cast=float)
+                            print(f'\n  Singular: {AlgGeo.IsSingularPoint(f, x, y)}')
+                        case 5:
+                            d = _ask('  Degree d: ', cast=int)
+                            print(f'\n  Genus = (d-1)(d-2)/2 = {AlgGeo.PlaneCurveGenus(d)}')
+                        case 6:
+                            d1 = _ask('  d₁: ', cast=int); d2 = _ask('  d₂: ', cast=int)
+                            print(f'\n  Bezout number = {AlgGeo.BezoutNumber(d1, d2)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 5:
+                    match choice:
+                        case 1:
+                            vals = [_ask(f'  λ{i+1}: ', cast=float) for i in range(4)]
+                            print(f'\n  Cross-ratio = {AlgGeo.CrossRatio(*vals):.6f}')
+                        case 2:
+                            p1 = tuple(_ask(f'  P1[{c}]: ', cast=float) for c in 'xyz')
+                            p2 = tuple(_ask(f'  P2[{c}]: ', cast=float) for c in 'xyz')
+                            print(f'\n  Projectively equivalent: {AlgGeo.ProjectiveEquivalent(p1, p2)}')
+                        case 3:
+                            a = _ask('  a (x²): ', cast=float)
+                            b = _ask('  b (xy): ', cast=float)
+                            c = _ask('  c (y²): ', cast=float)
+                            print(f'\n  Conic type: {AlgGeo.ClassifyConic(a, b, c)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 6:
+                    a = _ask('  a: ', cast=float); b = _ask('  b: ', cast=float)
+                    match choice:
+                        case 1: print(f'\n  Δ = {AlgGeo.EllipticCurveDiscriminant(a, b):.6f}')
+                        case 2: print(f'\n  j = {AlgGeo.JInvariant(a, b):.6f}')
+                        case 3:
+                            x = _ask('  x: ', cast=float); y = _ask('  y: ', cast=float)
+                            print(f'\n  On curve: {AlgGeo.IsOnEllipticCurve((x, y), a, b)}')
+                        case 4:
+                            x = _ask('  x: ', cast=float); y = _ask('  y: ', cast=float)
+                            print(f'\n  -P = {AlgGeo.EllipticNeg((x, y))}')
+                        case 5:
+                            x1=_ask('  P x: ',cast=float); y1=_ask('  P y: ',cast=float)
+                            x2=_ask('  Q x: ',cast=float); y2=_ask('  Q y: ',cast=float)
+                            print(f'\n  P+Q = {AlgGeo.EllipticAdd((x1,y1),(x2,y2),a,b)}')
+                        case 6:
+                            n = _ask('  n: ', cast=int)
+                            x = _ask('  P x: ', cast=float); y = _ask('  P y: ', cast=float)
+                            print(f'\n  [{n}]P = {AlgGeo.EllipticMul(n,(x,y),a,b)}')
+                        case 7:
+                            x = _ask('  x: ', cast=float); y = _ask('  y: ', cast=float)
+                            print(f'\n  ord(P) = {AlgGeo.EllipticPointOrder((x,y),a,b)}')
+                        case 8:
+                            p = _ask('  Prime p: ', cast=int)
+                            pts_e = AlgGeo.EllipticCurvePoints_Fp(int(a), int(b), p)
+                            print(f'\n  Points on E(𝔽_{p}): {len(pts_e)}')
+                            for pt in pts_e[:12]: print(f'    {pt}')
+                            if len(pts_e) > 12: print(f'    ... ({len(pts_e)-12} more)')
+                        case 9:
+                            p = _ask('  Prime p: ', cast=int)
+                            lo, hi = AlgGeo.HasseInterval(p)
+                            print(f'\n  #E(𝔽_{p}) ∈ [{lo}, {hi}]')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 7:
+                    f = _p2('f')
+                    match choice:
+                        case 1:
+                            sing = AlgGeo.SingularLocus(f)
+                            print(f'\n  Singular locus: {sing}')
+                        case 2:
+                            x=_ask('  x₀: ',cast=float); y=_ask('  y₀: ',cast=float)
+                            print(f'\n  Node: {AlgGeo.IsNodeSingularity(f, x, y)}')
+                        case 3:
+                            x=_ask('  x₀: ',cast=float); y=_ask('  y₀: ',cast=float)
+                            print(f'\n  Cusp: {AlgGeo.IsCuspSingularity(f, x, y)}')
+                        case 4:
+                            stype = _ask('  Type (node/cusp/tacnode/triple_point): ', cast=str).strip()
+                            print(f'\n  δ({stype}) = {AlgGeo.DeltaInvariant(stype)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 8:
+                    f = _p2('f'); g = _p2('g')
+                    match choice:
+                        case 1:
+                            x=_ask('  x₀: ',cast=float); y=_ask('  y₀: ',cast=float)
+                            print(f'\n  Intersection mult ≈ {AlgGeo.IntersectionMultiplicity(f, g, x, y)}')
+                        case 2:
+                            d = _ask('  Curve degree d: ', cast=int)
+                            ds = _ask('  Sum of δ-invariants: ', cast=int)
+                            print(f'\n  Geometric genus = {AlgGeo.GeometricGenus(d, ds)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 9:
+                    d = _ask('  Variety degree: ', cast=int)
+                    match choice:
+                        case 1:
+                            deg_d = _ask('  d for H(d): ', cast=int)
+                            print(f'\n  H({deg_d}) = {AlgGeo.HilbertFunction(d, deg_d)}')
+                        case 2:
+                            coeffs = AlgGeo.HilbertPolynomial(d)
+                            print(f'\n  Hilbert polynomial coefficients: {coeffs}')
+                        case 3:
+                            n = _ask('  n variables: ', cast=int)
+                            k = _ask('  k generators: ', cast=int)
+                            print(f'\n  Krull dim = {AlgGeo.KrullDimension(n, k)}')
+                        case 4:
+                            print(f'\n  deg(V) = {AlgGeo.VarietyDegree(d)}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 10:
+                    match choice:
+                        case 1:
+                            a=_ask('  a (x²): ',cast=float); b=_ask('  b (xy): ',cast=float)
+                            c=_ask('  c (y²): ',cast=float); d=_ask('  d (x): ',cast=float)
+                            e=_ask('  e (y): ',cast=float); f_c=_ask('  f (const): ',cast=float)
+                            poly = AlgGeo.ConicPoly(a,b,c,d,e,f_c)
+                            print(f'\n  Conic: {poly}   Type: {AlgGeo.ClassifyConic(a,b,c)}')
+                        case 2:
+                            a=_ask('  a: ',cast=float); b=_ask('  b: ',cast=float)
+                            print(f'\n  y²-x³-{a}x-{b}=0: {AlgGeo.EllipticCurvePoly(a,b)}')
+                        case 3:
+                            print(f'\n  Nodal cubic y²=x²(x+1): {AlgGeo.NodalCubic()}')
+                        case 4:
+                            print(f'\n  Cuspidal cubic y²=x³: {AlgGeo.CuspidalCubic()}')
+                        case 5:
+                            n = _ask('  n: ', cast=int)
+                            print(f'\n  Fermat x^{n}+y^{n}=1: {AlgGeo.FermatCurve(n)}')
+                        case _: print('\n  That was not a valid option.'); continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except Exception as e:
+                print(f'\n  Error: {e}')
+                print()
+                continue
+            print()
+
+# ============================================================
+# PHYSICS ENERGY DEBUG
+# ============================================================
+
+def PhysicsEnergyDebug():
+    SECTIONS = [
+        'Kinetic Energy', 'Gravitational PE', 'Conservation of Energy',
+        'Work & Work-Energy Theorem', 'IsWork? — Word Problem Parser',
+        'Power', 'Potential ↔ Force', 'Magnetic Field Energy', 'Energy Breakdown',
+    ]
+    while True:
+        _SectionHeader('Physics — Energy & Work', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i})  {s}')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+        while True:
+            _SectionHeader('Physics — Energy', SECTIONS[sec - 1])
+            if sec == 1:
+                print('  (1)  KE = ½mv²')
+                print('  (2)  Velocity from KE')
+                print('  (3)  ΔKE between two states')
+                print('  (4)  Rotational KE = ½Iω²')
+                print('  (5)  Total KE (translational + rotational)')
+            elif sec == 2:
+                print('  (1)  GPE = mgh')
+                print('  (2)  Height from GPE')
+                print('  (3)  ΔGPE over height change')
+                print('  (4)  Path independence check (3 paths, same Δh)')
+            elif sec == 3:
+                print('  (1)  Final velocity  (conservation, no friction)')
+                print('  (2)  Final height    (conservation)')
+                print('  (3)  Max height      (v_f = 0 at peak)')
+                print('  (4)  Final velocity with friction')
+                print('  (5)  Slide-bottom velocity (starts at rest)')
+                print('  (6)  Full energy state at a height')
+                print('  (7)  Energy at % of max height (PE/KE split)')
+            elif sec == 4:
+                print('  (1)  W = F·d·cos θ')
+                print('  (2)  Work-energy theorem  W_net = ΔKE')
+                print('  (3)  Force from work-energy theorem')
+                print('  (4)  Work by gravity  W = mg(h_i − h_f)')
+                print('  (5)  Work by spring   W = ½k(x_i² − x_f²)')
+            elif sec == 5:
+                print('  (1)  Analyse a single problem sentence')
+                print('  (2)  Run the four lecture examples')
+            elif sec == 6:
+                print('  (1)  Average power   P = W / Δt')
+                print('  (2)  Power from force  P = F·v·cos θ')
+                print('  (3)  Work from power  W = P·Δt')
+                print('  (4)  Watts ↔ horsepower')
+                print('  (5)  Power efficiency  η = P_out / P_in')
+            elif sec == 7:
+                print('  (1)  F = −ΔU / Δx')
+                print('  (2)  W = −ΔU')
+                print('  (3)  ΔU = −W')
+            elif sec == 8:
+                print('  (1)  Magnetic field energy  U_B = B²V/(2μ₀)')
+                print('  (2)  Magnetic energy density  u_B = B²/(2μ₀)')
+                print('  (3)  Inductor energy  U_L = ½LI²')
+                print('  (4)  Magnetic braking power')
+            elif sec == 9:
+                print('  (1)  Full energy breakdown at a point')
+                print('  (2)  Cannonball energy profile (launch / apex / land)')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
+            try:
+                if sec == 1:
+                    match choice:
+                        case 1:
+                            m = _ask('  Mass (kg): ', cast=float); v = _ask('  Velocity (m/s): ', cast=float)
+                            print(f'\n  KE = {PEnergy.KineticEnergy(m, v):.4f} J')
+                        case 2:
+                            ke = _ask('  KE (J): ', cast=float); m = _ask('  Mass (kg): ', cast=float)
+                            print(f'\n  v = {PEnergy.VelocityFromKE(ke, m):.4f} m/s')
+                        case 3:
+                            m = _ask('  Mass (kg): ', cast=float)
+                            vi = _ask('  v_initial (m/s): ', cast=float); vf = _ask('  v_final (m/s): ', cast=float)
+                            print(f'\n  ΔKE = {PEnergy.DeltaKE(m, vi, vf):.4f} J')
+                        case 4:
+                            I = _ask('  Moment of inertia I (kg·m²): ', cast=float)
+                            w = _ask('  ω (rad/s): ', cast=float)
+                            print(f'\n  KE_rot = {PEnergy.RotationalKE(I, w):.4f} J')
+                        case 5:
+                            m=_ask('  Mass (kg): ',cast=float); v=_ask('  v (m/s): ',cast=float)
+                            I=_ask('  I (kg·m²): ',cast=float); r=_ask('  Radius (m): ',cast=float)
+                            print(f'\n  KE_total = {PEnergy.TotalKERolling(m, v, I, r):.4f} J')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 2:
+                    match choice:
+                        case 1:
+                            m=_ask('  Mass (kg): ',cast=float); h=_ask('  Height (m): ',cast=float)
+                            print(f'\n  GPE = {PEnergy.GravitationalPE(m, h):.4f} J')
+                        case 2:
+                            gpe=_ask('  GPE (J): ',cast=float); m=_ask('  Mass (kg): ',cast=float)
+                            print(f'\n  h = {PEnergy.HeightFromGPE(gpe, m):.4f} m')
+                        case 3:
+                            m=_ask('  Mass (kg): ',cast=float)
+                            hi=_ask('  h_i (m): ',cast=float); hf=_ask('  h_f (m): ',cast=float)
+                            print(f'\n  ΔGPE = {PEnergy.DeltaGPE(m, hi, hf):.4f} J')
+                        case 4:
+                            m=_ask('  Mass (kg): ',cast=float); h=_ask('  Height (m): ',cast=float)
+                            same, gpe = PEnergy.PathIndependenceCheck(m, h)
+                            print(f'\n  All 3 paths give GPE = {gpe:.4f} J  (path-independent: {same})')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 3:
+                    match choice:
+                        case 1:
+                            vi=_ask('  v_i (m/s): ',cast=float)
+                            hi=_ask('  h_i (m): ',cast=float); hf=_ask('  h_f (m): ',cast=float)
+                            vf = PEnergy.FinalVelocityConservation(vi, hi, hf)
+                            print(f'\n  v_f = {vf:.4f} m/s' if vf is not None else '\n  Cannot reach that height.')
+                        case 2:
+                            vi=_ask('  v_i: ',cast=float); hi=_ask('  h_i: ',cast=float); vf=_ask('  v_f: ',cast=float)
+                            print(f'\n  h_f = {PEnergy.FinalHeightConservation(vi, hi, vf):.4f} m')
+                        case 3:
+                            vi=_ask('  v_i (m/s): ',cast=float); hi=_ask('  h_i (m): ',cast=float)
+                            print(f'\n  h_max = {PEnergy.MaxHeightConservation(vi, hi):.4f} m')
+                        case 4:
+                            m=_ask('  Mass: ',cast=float); vi=_ask('  v_i: ',cast=float)
+                            hi=_ask('  h_i: ',cast=float); hf=_ask('  h_f: ',cast=float)
+                            ff=_ask('  Friction force (N): ',cast=float); d=_ask('  Distance (m): ',cast=float)
+                            print(f'\n  v_f = {PEnergy.FinalVelocityWithFriction(m,vi,hi,hf,ff,d):.4f} m/s')
+                        case 5:
+                            m=_ask('  Mass: ',cast=float); h_top=_ask('  Height at top (m): ',cast=float)
+                            h_bot=_ask('  Height at bottom (m, usually 0): ',cast=float)
+                            print(f'\n  v_f = {PEnergy.SlideBottomVelocity(m, h_top, h_bot):.4f} m/s')
+                        case 6:
+                            m=_ask('  Mass: ',cast=float); v=_ask('  v: ',cast=float); h=_ask('  h: ',cast=float)
+                            for k, val in PEnergy.EnergyStateAtHeight(m, v, h).items():
+                                print(f'  {k}: {val:.4f}')
+                        case 7:
+                            me=_ask('  Total ME (J): ',cast=float); frac=_ask('  Height fraction (0–1): ',cast=float)
+                            pe, ke = PEnergy.EnergyAtHeightFraction(me, frac)
+                            print(f'\n  PE = {pe:.4f} J   KE = {ke:.4f} J')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 4:
+                    match choice:
+                        case 1:
+                            F=_ask('  Force (N): ',cast=float); d=_ask('  Distance (m): ',cast=float)
+                            th=_ask('  Angle θ (deg, 0 if parallel): ',cast=float)
+                            print(f'\n  W = {PEnergy.Work(F, d, th):.4f} J')
+                        case 2:
+                            m=_ask('  Mass: ',cast=float); vi=_ask('  v_i: ',cast=float); vf=_ask('  v_f: ',cast=float)
+                            print(f'\n  W_net = {PEnergy.WorkEnergyTheorem(m, vi, vf):.4f} J')
+                        case 3:
+                            m=_ask('  Mass: ',cast=float); vi=_ask('  v_i: ',cast=float)
+                            vf=_ask('  v_f: ',cast=float); d=_ask('  Distance: ',cast=float)
+                            print(f'\n  F = {PEnergy.ForceFromWorkEnergyTheorem(m,vi,vf,d):.4f} N')
+                        case 4:
+                            m=_ask('  Mass: ',cast=float); hi=_ask('  h_i: ',cast=float); hf=_ask('  h_f: ',cast=float)
+                            print(f'\n  W_gravity = {PEnergy.WorkByGravity(m, hi, hf):.4f} J')
+                        case 5:
+                            k=_ask('  k (N/m): ',cast=float); xi=_ask('  x_i (m): ',cast=float); xf=_ask('  x_f (m): ',cast=float)
+                            print(f'\n  W_spring = {PEnergy.WorkBySpring(k, xi, xf):.4f} J')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 5:
+                    match choice:
+                        case 1:
+                            problem = _ask('  Describe the problem: ', cast=str)
+                            r = PEnergy.IsWork(problem)
+                            print(f'\n  Is work: {r["is_work"]}')
+                            print(f'  Reason:  {r["reason"]}')
+                            print(f'  Formula: {r["W_formula"]}')
+                        case 2:
+                            examples = [
+                                'A student pushes against a wall until exhausted.',
+                                'A man lifts bricks into the back of a pickup truck.',
+                                'A book falls off a table and free falls to the ground.',
+                                'A waiter carries a tray above his head across the room at constant speed.',
+                            ]
+                            print()
+                            for prob in examples:
+                                r = PEnergy.IsWork(prob)
+                                print(f'  {prob}')
+                                print(f'  → Is work: {r["is_work"]}  |  {r["reason"]}')
+                                print()
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 6:
+                    match choice:
+                        case 1:
+                            W=_ask('  W (J): ',cast=float); t=_ask('  Δt (s): ',cast=float)
+                            print(f'\n  P_avg = {PEnergy.PowerAvg(W, t):.4f} W')
+                        case 2:
+                            F=_ask('  F (N): ',cast=float); v=_ask('  v (m/s): ',cast=float); th=_ask('  θ (deg): ',cast=float)
+                            print(f'\n  P = {PEnergy.PowerFromForce(F, v, th):.4f} W')
+                        case 3:
+                            P=_ask('  P (W): ',cast=float); t=_ask('  Δt (s): ',cast=float)
+                            print(f'\n  W = {PEnergy.WorkFromPower(P, t):.4f} J')
+                        case 4:
+                            val=_ask('  Value: ',cast=float)
+                            unit=_ask('  From (W or hp): ',cast=str).strip().lower()
+                            if 'hp' in unit:
+                                print(f'\n  {val} hp = {PEnergy.HorsepowerToWatts(val):.4f} W')
+                            else:
+                                print(f'\n  {val} W = {PEnergy.WattsToHorsepower(val):.6f} hp')
+                        case 5:
+                            po=_ask('  P_out (W): ',cast=float); pi=_ask('  P_in (W): ',cast=float)
+                            eta = PEnergy.PowerEfficiency(po, pi)
+                            print(f'\n  η = {eta:.4f}  ({eta*100:.2f}%)')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 7:
+                    match choice:
+                        case 1:
+                            dU=_ask('  ΔU (J): ',cast=float); dx=_ask('  Δx (m): ',cast=float)
+                            print(f'\n  F = −ΔU/Δx = {PEnergy.ForceFromPotential(dU, dx):.4f} N')
+                        case 2:
+                            pi=_ask('  U_i (J): ',cast=float); pf=_ask('  U_f (J): ',cast=float)
+                            print(f'\n  W = −ΔU = {PEnergy.WorkFromPotentialChange(pi, pf):.4f} J')
+                        case 3:
+                            W=_ask('  W (J): ',cast=float)
+                            print(f'\n  ΔU = −W = {PEnergy.PotentialChangeFromWork(W):.4f} J')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 8:
+                    match choice:
+                        case 1:
+                            B=_ask('  B (T): ',cast=float); V=_ask('  Volume (m³): ',cast=float)
+                            print(f'\n  U_B = {PEnergy.MagneticFieldEnergy(B, V):.4f} J')
+                        case 2:
+                            B=_ask('  B (T): ',cast=float)
+                            print(f'\n  u_B = {PEnergy.MagneticEnergyDensity(B):.4f} J/m³')
+                        case 3:
+                            L=_ask('  L (H): ',cast=float); I=_ask('  I (A): ',cast=float)
+                            print(f'\n  U_L = {PEnergy.InductorEnergy(L, I):.4f} J')
+                        case 4:
+                            B=_ask('  B (T): ',cast=float); L=_ask('  Length (m): ',cast=float)
+                            v=_ask('  v (m/s): ',cast=float); R=_ask('  R (Ω): ',cast=float)
+                            print(f'\n  P_brake = {PEnergy.MagneticBrakingPower(B, L, v, R):.4f} W')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 9:
+                    match choice:
+                        case 1:
+                            m=_ask('  Mass: ',cast=float); v=_ask('  v: ',cast=float); h=_ask('  h: ',cast=float)
+                            k=_ask('  Spring k (0 if none): ',cast=float); x=_ask('  Spring x (0 if none): ',cast=float)
+                            th=_ask('  Thermal energy (J, 0 if none): ',cast=float)
+                            print()
+                            for key, val in PEnergy.EnergyBreakdown(m, v, h, k, x, th).items():
+                                print(f'  {key}: {val:.4f} J')
+                        case 2:
+                            m=_ask('  Mass: ',cast=float)
+                            v0x=_ask('  v₀ₓ (m/s): ',cast=float); v0y=_ask('  v₀ᵧ (m/s): ',cast=float)
+                            profile = PEnergy.CannonBallEnergyProfile(m, v0x, v0y)
+                            print()
+                            for phase, data in profile.items():
+                                print(f'  {phase.upper()}:')
+                                for k, val in data.items(): print(f'    {k}: {val:.4f}')
+                        case _: print('\n  That was not a valid option.'); continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except Exception as e:
+                print(f'\n  Error: {e}')
+                print()
+                continue
+            print()
+
+
+# ============================================================
+# PHYSICS SPRINGS DEBUG
+# ============================================================
+
+def PhysicsSpringsDebug():
+    SECTIONS = [
+        "Hooke's Law", 'Spring Potential Energy',
+        'SHM — Position, Velocity, Acceleration', 'Period & Frequency',
+        'SHM Energy', 'Spring Forces', 'Spring-Cut & Momentum',
+    ]
+    while True:
+        _SectionHeader('Physics — Springs & SHM', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i})  {s}')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+        while True:
+            _SectionHeader('Physics — Springs', SECTIONS[sec - 1])
+            if sec == 1:
+                print('  (1)  F = −kx  (2)  F_applied = kx  (3)  x = F/k  (4)  k = F/x')
+                print('  (5)  Series k_eff  (6)  Parallel k_eff  (7)  Natural length after stretch')
+            elif sec == 2:
+                print('  (1)  PE = ½kx²  (2)  x from PE  (3)  Work by spring  (4)  Work against spring')
+            elif sec == 3:
+                print('  (1)  x(t)  (2)  v(t)  (3)  a(t)  (4)  v_max  (5)  a_max')
+                print('  (6)  v at position x  (7)  a = −ω²x')
+            elif sec == 4:
+                print('  (1)  ω = √(k/m)  (2)  T = 2π√(m/k)  (3)  f = 1/T')
+                print('  (4)  Pendulum T  (5)  k from T  (6)  m from T')
+            elif sec == 5:
+                print('  (1)  E = ½kA²  (2)  KE at x  (3)  PE at x')
+                print('  (4)  Amplitude from E  (5)  x where KE = PE')
+            elif sec == 6:
+                print('  (1)  Equilibrium stretch x_eq = mg/k')
+                print('  (2)  Net spring force at x  (3)  Vertical spring breakdown')
+            elif sec == 7:
+                print('  (1)  Total momentum before cut')
+                print('  (2)  v1 after cut given v2  (3)  Full spring-cut analysis')
+                print('  (4)  Release from rest  (5)  Release velocities (given one)')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
+            try:
+                if sec == 1:
+                    k = _ask('  Spring constant k (N/m): ', cast=float)
+                    match choice:
+                        case 1:
+                            x = _ask('  Displacement x (m): ', cast=float)
+                            print(f'\n  F_spring = {PSprings.SpringForce(k, x):.4f} N')
+                        case 2:
+                            x = _ask('  Displacement x (m): ', cast=float)
+                            print(f'\n  F_applied = {PSprings.AppliedForceToHold(k, x):.4f} N')
+                        case 3:
+                            F = _ask('  Force (N): ', cast=float)
+                            print(f'\n  x = {PSprings.SpringDisplacement(F, k):.4f} m')
+                        case 4:
+                            F=_ask('  F (N): ',cast=float); x=_ask('  x (m): ',cast=float)
+                            print(f'\n  k = {PSprings.SpringConstant(F, x):.4f} N/m')
+                        case 5:
+                            ks = [float(v) for v in _ask('  k values (space-sep): ', cast=str).split()]
+                            print(f'\n  k_series = {PSprings.SpringConstantSeries(*ks):.4f} N/m')
+                        case 6:
+                            ks = [float(v) for v in _ask('  k values (space-sep): ', cast=str).split()]
+                            print(f'\n  k_parallel = {PSprings.SpringConstantParallel(*ks):.4f} N/m')
+                        case 7:
+                            L0=_ask('  Natural length L₀ (m): ',cast=float); x=_ask('  Displacement (m): ',cast=float)
+                            print(f'\n  New length = {PSprings.SpringLength(L0, x):.4f} m')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 2:
+                    k = _ask('  k (N/m): ', cast=float)
+                    match choice:
+                        case 1:
+                            x = _ask('  x (m): ', cast=float)
+                            print(f'\n  PE = {PSprings.SpringPE(k, x):.4f} J')
+                        case 2:
+                            pe = _ask('  PE (J): ', cast=float)
+                            print(f'\n  x = {PSprings.DisplacementFromPE(pe, k):.4f} m')
+                        case 3:
+                            xi=_ask('  x_i (m): ',cast=float); xf=_ask('  x_f (m): ',cast=float)
+                            print(f'\n  W_by_spring = {PSprings.WorkDoneBySpring(k, xi, xf):.4f} J')
+                        case 4:
+                            xi=_ask('  x_i (m): ',cast=float); xf=_ask('  x_f (m): ',cast=float)
+                            print(f'\n  W_against = {PSprings.WorkDoneAgainstSpring(k, xi, xf):.4f} J')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 3:
+                    A=_ask('  Amplitude A (m): ',cast=float); w=_ask('  ω (rad/s): ',cast=float)
+                    t=_ask('  Time t (s): ',cast=float); phi=_ask('  Phase φ (rad, 0 if none): ',cast=float)
+                    match choice:
+                        case 1: print(f'\n  x(t) = {PSprings.SHM_Position(A, w, t, phi):.6f} m')
+                        case 2: print(f'\n  v(t) = {PSprings.SHM_Velocity(A, w, t, phi):.6f} m/s')
+                        case 3: print(f'\n  a(t) = {PSprings.SHM_Acceleration(A, w, t, phi):.6f} m/s²')
+                        case 4: print(f'\n  v_max = {PSprings.SHM_MaxVelocity(A, w):.6f} m/s')
+                        case 5: print(f'\n  a_max = {PSprings.SHM_MaxAcceleration(A, w):.6f} m/s²')
+                        case 6:
+                            x = _ask('  Position x (m): ', cast=float)
+                            print(f'\n  v = {PSprings.SHM_VelocityAtPosition(A, w, x):.6f} m/s')
+                        case 7:
+                            x = _ask('  Position x (m): ', cast=float)
+                            print(f'\n  a = {PSprings.SHM_AccelFromPosition(w, x):.6f} m/s²')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 4:
+                    match choice:
+                        case 1:
+                            k=_ask('  k: ',cast=float); m=_ask('  m: ',cast=float)
+                            print(f'\n  ω = {PSprings.AngularFrequency(k, m):.6f} rad/s')
+                        case 2:
+                            m=_ask('  m: ',cast=float); k=_ask('  k: ',cast=float)
+                            print(f'\n  T = {PSprings.Period(m, k):.6f} s')
+                        case 3:
+                            m=_ask('  m: ',cast=float); k=_ask('  k: ',cast=float)
+                            print(f'\n  f = {PSprings.Frequency(m, k):.6f} Hz')
+                        case 4:
+                            L=_ask('  Pendulum length (m): ',cast=float)
+                            print(f'\n  T = {PSprings.PendulumPeriod(L):.6f} s')
+                        case 5:
+                            m=_ask('  m: ',cast=float); T=_ask('  T (s): ',cast=float)
+                            print(f'\n  k = {PSprings.SpringConstantFromPeriod(m, T):.4f} N/m')
+                        case 6:
+                            k=_ask('  k: ',cast=float); T=_ask('  T (s): ',cast=float)
+                            print(f'\n  m = {PSprings.MassFromPeriod(k, T):.4f} kg')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 5:
+                    k=_ask('  k (N/m): ',cast=float); A=_ask('  Amplitude A (m): ',cast=float)
+                    match choice:
+                        case 1: print(f'\n  E = {PSprings.SHM_TotalEnergy(k, A):.4f} J')
+                        case 2:
+                            x=_ask('  x (m): ',cast=float)
+                            print(f'\n  KE = {PSprings.SHM_KE_AtPosition(k, A, x):.4f} J')
+                        case 3:
+                            x=_ask('  x (m): ',cast=float)
+                            print(f'\n  PE = {PSprings.SHM_PE_AtPosition(k, x):.4f} J')
+                        case 4:
+                            E=_ask('  E (J): ',cast=float)
+                            print(f'\n  A = {PSprings.AmplitudeFromEnergy(E, k):.4f} m')
+                        case 5:
+                            print(f'\n  x = ±{PSprings.EquipartitionPosition(A):.4f} m')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 6:
+                    k=_ask('  k (N/m): ',cast=float)
+                    match choice:
+                        case 1:
+                            m=_ask('  m (kg): ',cast=float)
+                            print(f'\n  x_eq = {PSprings.EquilibriumStretch(m, k):.4f} m')
+                        case 2:
+                            x=_ask('  x from equilibrium (m): ',cast=float)
+                            print(f'\n  F_net = {PSprings.SpringNetForce(k, x):.4f} N')
+                        case 3:
+                            x=_ask('  Stretch from natural (m): ',cast=float); m=_ask('  m (kg): ',cast=float)
+                            for key, val in PSprings.VerticalSpringForces(k, x, m).items():
+                                print(f'  {key}: {val:.4f} N')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 7:
+                    match choice:
+                        case 1:
+                            m1=_ask('  m1 (kg): ',cast=float); m2=_ask('  m2 (kg): ',cast=float)
+                            v=_ask('  System velocity (m/s): ',cast=float)
+                            print(f'\n  p_total = {PSprings.TotalMomentumBefore(m1, m2, v):.4f} kg·m/s')
+                        case 2:
+                            p=_ask('  p_total: ',cast=float)
+                            m1=_ask('  m1: ',cast=float); m2=_ask('  m2: ',cast=float)
+                            v2=_ask('  v2_after: ',cast=float)
+                            print(f'\n  v1_after = {PSprings.VelocityAfterCut(p, m1, m2, v2):.4f} m/s')
+                        case 3:
+                            m1=_ask('  m1: ',cast=float); m2=_ask('  m2: ',cast=float)
+                            v_sys=_ask('  System v before cut: ',cast=float)
+                            v2_after=_ask('  v2 after cut: ',cast=float)
+                            for key, val in PSprings.SpringCutFullAnalysis(m1, m2, v_sys, v2_after).items():
+                                print(f'  {key}: {val}')
+                        case 4:
+                            m1=_ask('  m1: ',cast=float); m2=_ask('  m2: ',cast=float)
+                            k=_ask('  k (N/m): ',cast=float); comp=_ask('  Compression x (m): ',cast=float)
+                            for key, val in PSprings.SpringReleaseWithMomentum(m1, m2, k, comp).items():
+                                print(f'  {key}: {val:.4f}')
+                        case 5:
+                            m1=_ask('  m1: ',cast=float); m2=_ask('  m2: ',cast=float)
+                            v1_in=_ask('  v1 (0 if unknown): ',cast=float)
+                            v2_in=_ask('  v2 (0 if unknown): ',cast=float)
+                            v1, v2 = PSprings.SpringReleaseVelocities(
+                                m1, m2,
+                                v1=v1_in if v1_in != 0 else None,
+                                v2=v2_in if v2_in != 0 else None)
+                            print(f'\n  v1 = {v1:.4f} m/s   v2 = {v2:.4f} m/s')
+                        case _: print('\n  That was not a valid option.'); continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except Exception as e:
+                print(f'\n  Error: {e}')
+                print()
+                continue
+            print()
+
+
+# ============================================================
+# PHYSICS MOMENTUM DEBUG
+# ============================================================
+
+def PhysicsMomentumDebug():
+    SECTIONS = [
+        'Momentum', 'Impulse', 'Conservation of Momentum',
+        'Center of Mass', "Newton's Laws — Momentum Form",
+        'Spring-Cut Analysis', 'Angular Momentum', 'Rocket Propulsion',
+    ]
+    while True:
+        _SectionHeader('Physics — Momentum & Impulse', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i})  {s}')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+        while True:
+            _SectionHeader('Physics — Momentum', SECTIONS[sec - 1])
+            if sec == 1:
+                print('  (1)  p = mv  (2)  v from p  (3)  Δp  (4)  Total system momentum')
+            elif sec == 2:
+                print('  (1)  J = FΔt  (2)  J = Δp  (3)  F_avg from J')
+                print('  (4)  Impact time from J and F  (5)  F_avg = mΔv/Δt')
+            elif sec == 3:
+                print('  (1)  Is momentum conserved?  (2)  Find v2f  (3)  Perfectly inelastic v_f')
+            elif sec == 4:
+                print('  (1)  CM 1D  (2)  CM 2D  (3)  v_cm  (4)  a_cm  (5)  Reduced mass μ')
+            elif sec == 5:
+                print('  (1)  F = Δp/Δt  (2)  Δp = F·Δt  (3)  Newton 3rd collision forces')
+            elif sec == 6:
+                print('  (1)  Before-cut state  (2)  After-cut state')
+                print('  (3)  Full spring-cut problem  (4)  Cut from rest')
+            elif sec == 7:
+                print('  (1)  L = mvr sin θ  (2)  L = Iω  (3)  ω₂ = I₁ω₁/I₂  (4)  τ = ΔL/Δt')
+            elif sec == 8:
+                print('  (1)  Thrust F = v_ex · dm/dt')
+                print('  (2)  Rocket Δv  (Tsiolkovsky)  (3)  Propellant mass')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
+            try:
+                if sec == 1:
+                    match choice:
+                        case 1:
+                            m=_ask('  Mass (kg): ',cast=float); v=_ask('  v (m/s): ',cast=float)
+                            print(f'\n  p = {PMomentum.Momentum(m, v):.4f} kg·m/s')
+                        case 2:
+                            p=_ask('  p (kg·m/s): ',cast=float); m=_ask('  Mass (kg): ',cast=float)
+                            print(f'\n  v = {PMomentum.VelocityFromMomentum(p, m):.4f} m/s')
+                        case 3:
+                            m=_ask('  Mass: ',cast=float); vi=_ask('  v_i: ',cast=float); vf=_ask('  v_f: ',cast=float)
+                            print(f'\n  Δp = {PMomentum.DeltaMomentum(m, vi, vf):.4f} kg·m/s')
+                        case 4:
+                            n=_ask('  Objects: ',cast=int)
+                            ms=[_ask(f'  m{i+1}: ',cast=float) for i in range(n)]
+                            vs=[_ask(f'  v{i+1}: ',cast=float) for i in range(n)]
+                            print(f'\n  p_total = {PMomentum.TotalMomentum(ms, vs):.4f} kg·m/s')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 2:
+                    match choice:
+                        case 1:
+                            F=_ask('  F (N): ',cast=float); dt=_ask('  Δt (s): ',cast=float)
+                            print(f'\n  J = {PMomentum.Impulse(F, dt):.4f} N·s')
+                        case 2:
+                            m=_ask('  m: ',cast=float); vi=_ask('  v_i: ',cast=float); vf=_ask('  v_f: ',cast=float)
+                            print(f'\n  J = Δp = {PMomentum.ImpulseFromMomentumChange(m, vi, vf):.4f} N·s')
+                        case 3:
+                            J=_ask('  J (N·s): ',cast=float); dt=_ask('  Δt (s): ',cast=float)
+                            print(f'\n  F_avg = {PMomentum.AverageForceFromImpulse(J, dt):.4f} N')
+                        case 4:
+                            J=_ask('  J (N·s): ',cast=float); F=_ask('  F (N): ',cast=float)
+                            print(f'\n  Δt = {PMomentum.ImpactTime(J, F):.4f} s')
+                        case 5:
+                            m=_ask('  m: ',cast=float); vi=_ask('  v_i: ',cast=float)
+                            vf=_ask('  v_f: ',cast=float); dt=_ask('  Δt: ',cast=float)
+                            print(f'\n  F_avg = {PMomentum.AverageForce(m, vi, vf, dt):.4f} N')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 3:
+                    match choice:
+                        case 1:
+                            n=_ask('  Objects: ',cast=int)
+                            ms=[_ask(f'  m{i+1}: ',cast=float) for i in range(n)]
+                            vi=[_ask(f'  v{i+1}_before: ',cast=float) for i in range(n)]
+                            vf=[_ask(f'  v{i+1}_after: ',cast=float) for i in range(n)]
+                            pi=PMomentum.SystemMomenta(ms, vi); pf=PMomentum.SystemMomenta(ms, vf)
+                            print(f'\n  p_before={sum(pi):.4f}  p_after={sum(pf):.4f}  Conserved: {PMomentum.IsConserved(pi, pf)}')
+                        case 2:
+                            m1=_ask('  m1: ',cast=float); v1i=_ask('  v1i: ',cast=float)
+                            m2=_ask('  m2: ',cast=float); v2i=_ask('  v2i: ',cast=float); v1f=_ask('  v1f: ',cast=float)
+                            print(f'\n  v2f = {PMomentum.FindFinalVelocity_2Body(m1, v1i, m2, v2i, v1f):.4f} m/s')
+                        case 3:
+                            m1=_ask('  m1: ',cast=float); v1i=_ask('  v1i: ',cast=float)
+                            m2=_ask('  m2: ',cast=float); v2i=_ask('  v2i (0 if at rest): ',cast=float)
+                            print(f'\n  v_f = {PMomentum.InelasticFinalVelocity(m1, v1i, m2, v2i):.4f} m/s')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 4:
+                    match choice:
+                        case 1:
+                            n=_ask('  Objects: ',cast=int)
+                            ms=[_ask(f'  m{i+1}: ',cast=float) for i in range(n)]
+                            xs=[_ask(f'  x{i+1}: ',cast=float) for i in range(n)]
+                            print(f'\n  x_cm = {PMomentum.CenterOfMass1D(ms, xs):.4f} m')
+                        case 2:
+                            n=_ask('  Objects: ',cast=int)
+                            ms=[_ask(f'  m{i+1}: ',cast=float) for i in range(n)]
+                            xs=[_ask(f'  x{i+1}: ',cast=float) for i in range(n)]
+                            ys=[_ask(f'  y{i+1}: ',cast=float) for i in range(n)]
+                            xcm, ycm = PMomentum.CenterOfMass2D(ms, xs, ys)
+                            print(f'\n  CM = ({xcm:.4f}, {ycm:.4f}) m')
+                        case 3:
+                            n=_ask('  Objects: ',cast=int)
+                            ms=[_ask(f'  m{i+1}: ',cast=float) for i in range(n)]
+                            vs=[_ask(f'  v{i+1}: ',cast=float) for i in range(n)]
+                            print(f'\n  v_cm = {PMomentum.CenterOfMassVelocity(ms, vs):.4f} m/s')
+                        case 4:
+                            F=_ask('  F_ext (N): ',cast=float); M=_ask('  Total mass (kg): ',cast=float)
+                            print(f'\n  a_cm = {PMomentum.CenterOfMassAcceleration(F, M):.4f} m/s²')
+                        case 5:
+                            m1=_ask('  m1: ',cast=float); m2=_ask('  m2: ',cast=float)
+                            print(f'\n  μ = {PMomentum.ReducedMass(m1, m2):.4f} kg')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 5:
+                    match choice:
+                        case 1:
+                            dp=_ask('  Δp (kg·m/s): ',cast=float); dt=_ask('  Δt (s): ',cast=float)
+                            print(f'\n  F = {PMomentum.NewtonSecondLaw_Momentum(dp, dt):.4f} N')
+                        case 2:
+                            F=_ask('  F (N): ',cast=float); dt=_ask('  Δt (s): ',cast=float)
+                            print(f'\n  Δp = {PMomentum.MomentumChangeFromForce(F, dt):.4f} kg·m/s')
+                        case 3:
+                            J1=_ask('  Impulse on obj1 (N·s): ',cast=float)
+                            j1, j2 = PMomentum.NewtonThirdCollisionForces(J1)
+                            print(f'\n  J on obj1 = {j1:.4f} N·s   J on obj2 = {j2:.4f} N·s')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 6:
+                    m1=_ask('  m1 (kg): ',cast=float); m2=_ask('  m2 (kg): ',cast=float)
+                    match choice:
+                        case 1:
+                            v=_ask('  System v (m/s): ',cast=float)
+                            for key, val in PMomentum.BeforeCutState(m1, m2, v).items():
+                                print(f'  {key}: {val:.4f}')
+                        case 2:
+                            p=_ask('  p_total: ',cast=float); v2=_ask('  v2_after: ',cast=float)
+                            for key, val in PMomentum.AfterCutState(m1, m2, p, v2).items():
+                                print(f'  {key}: {val}')
+                        case 3:
+                            v_sys=_ask('  System v before cut: ',cast=float)
+                            v2_after=_ask('  v2 after cut: ',cast=float)
+                            r = PMomentum.SpringCutProblem(m1, m2, v_sys, v2_after)
+                            print('\n  BEFORE:')
+                            for k, v in r['before'].items(): print(f'    {k}: {v:.4f}')
+                            print('  AFTER:')
+                            for k, v in r['after'].items(): print(f'    {k}: {v}')
+                            print(f'  Spring KE released: {r["spring_KE_released"]:.4f} J')
+                        case 4:
+                            v2=_ask('  v2 after cut (m/s): ',cast=float)
+                            for key, val in PMomentum.SpringCutFromRest(m1, m2, v2).items():
+                                print(f'  {key}: {val:.4f}')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 7:
+                    match choice:
+                        case 1:
+                            m=_ask('  m: ',cast=float); v=_ask('  v: ',cast=float)
+                            r=_ask('  r (m): ',cast=float); th=_ask('  θ (deg, 90 if circular): ',cast=float)
+                            print(f'\n  L = {PMomentum.AngularMomentum(m, v, r, th):.4f} kg·m²/s')
+                        case 2:
+                            I=_ask('  I (kg·m²): ',cast=float); w=_ask('  ω (rad/s): ',cast=float)
+                            print(f'\n  L = {PMomentum.AngularMomentumFromI(I, w):.4f} kg·m²/s')
+                        case 3:
+                            I1=_ask('  I1: ',cast=float); w1=_ask('  ω1: ',cast=float); I2=_ask('  I2: ',cast=float)
+                            print(f'\n  ω2 = {PMomentum.FinalAngularVelocity(I1, w1, I2):.4f} rad/s')
+                        case 4:
+                            dL=_ask('  ΔL (kg·m²/s): ',cast=float); dt=_ask('  Δt (s): ',cast=float)
+                            print(f'\n  τ = {PMomentum.TorqueFromAngularMomentum(dL, dt):.4f} N·m')
+                        case _: print('\n  That was not a valid option.'); continue
+                elif sec == 8:
+                    match choice:
+                        case 1:
+                            vex=_ask('  Exhaust speed (m/s): ',cast=float)
+                            dmdt=_ask('  Mass flow rate (kg/s): ',cast=float)
+                            print(f'\n  Thrust = {PMomentum.RocketThrust(vex, dmdt):.4f} N')
+                        case 2:
+                            vex=_ask('  v_exhaust (m/s): ',cast=float)
+                            mi=_ask('  m_initial (kg): ',cast=float); mf=_ask('  m_final (kg): ',cast=float)
+                            print(f'\n  Δv = {PMomentum.RocketDeltaV(vex, mi, mf):.4f} m/s')
+                        case 3:
+                            dv=_ask('  Δv (m/s): ',cast=float); vex=_ask('  v_exhaust (m/s): ',cast=float)
+                            mp=_ask('  Payload mass (kg): ',cast=float)
+                            print(f'\n  Propellant = {PMomentum.RocketPropellantMass(dv, vex, mp):.4f} kg')
+                        case _: print('\n  That was not a valid option.'); continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except Exception as e:
+                print(f'\n  Error: {e}')
+                print()
+                continue
             print()
