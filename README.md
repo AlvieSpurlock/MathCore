@@ -1,278 +1,263 @@
 # MathCore
 
-MathCore is a modular mathematical and physics computation library for Python. It provides a clean, readable API covering arithmetic, 1D/2D/3D kinematics, vector operations, projectile motion, and a full force physics system — all without external dependencies.
+MathCore is a modular mathematical computation library and generative art engine for Python. It provides a clean, readable API covering pure mathematics and physics across 23 domains — and uses those calculations as direct input to a deterministic generative art system that turns every result into a unique, reproducible visual piece.
 
-Every function is documented, guarded against invalid input, and returns clean values ready for use in scripts, simulations, CLI tools, or as a backend engine for larger applications.
+Every function is documented, guarded against invalid input, and returns clean values ready for use in scripts, simulations, or as the computational backbone of the art engine. No external dependencies are required for the math layer. Pillow is required for the art engine.
 
 ---
 
 ## Overview
 
-MathCore is organized into focused modules that build on each other by prerequisite:
+MathCore has two layers that work together.
 
-| Module | What It Covers |
-|--------|---------------|
-| `BasicMath` | Arithmetic — add, subtract, multiply, divide, modulo, even check, random int |
-| `Physics_1D` | 1D kinematics — distance, velocity, acceleration, displacement, position |
-| `Physics_2D` | 2D vectors and projectile motion with and without air resistance |
-| `Physics_3D` | 3D vectors and projectile motion with and without air resistance |
-| `Forces` | Force objects, force systems, energy, momentum, equilibrium, drag, terminal velocity |
+The **calculation layer** is 23 focused modules covering 1,364 callable functions across pure mathematics and physics. Every function accepts clean numeric inputs and returns a result.
+
+The **art engine** takes that result — along with the function name and the exact input values — and generates a 3000×3000px artwork that is mathematically determined by what was computed. The same calculation always produces the same artwork. Different inputs to the same function produce visually distinct pieces.
 
 ---
 
-## Why MathCore?
+## Calculation Modules
 
-Python has arithmetic operators, but MathCore solves a different problem: **a reusable, well-structured math and physics backend** that you can import into any project.
-
-MathCore provides:
-
-- Multi-argument arithmetic functions with a consistent API
-- Full 2D and 3D vector operation suites
-- Projectile motion with realistic drag calculations
-- A complete force physics system with object-level properties
-- Division-by-zero guards and domain validation throughout
-- An interactive Debug UI for every module
-- No classes to instantiate for math functions — just clean callable functions
-- Force objects (`Force2D`, `Force3D`) and force systems (`Forces2D`, `Forces3D`) where objects are appropriate
+| Module | Domain | Functions | Sample |
+|--------|--------|-----------|--------|
+| `Algebra` | Linear, quadratic, polynomial equations | 42 | `Linear`, `Slope`, `SolveLinearForX` |
+| `AbstractAlgebra` | Groups, rings, fields, modular arithmetic | 76 | `GroupOrder`, `IsAbelian`, `ModularInverse` |
+| `AlgebraicGeometry` | Curves, varieties, projective geometry | 63 | `EllipticCurvePoint`, `BezoutNumber` |
+| `Calculus` | Limits, derivatives, integrals, series | 39 | `Limit`, `Derivative`, `RiemannSum` |
+| `Combinatorics` | Counting, permutations, graph theory | 55 | `Factorial`, `BinomialCoefficient`, `CatalanNumber` |
+| `DifferentialGeometry` | Curvature, geodesics, manifolds | 61 | `GaussianCurvature`, `Geodesic` |
+| `Differentiation` | Differentiation rules and applications | 55 | `ChainRule`, `ProductRule`, `CriticalPoints` |
+| `DiscreteMath` | Logic, sets, graphs, number theory | 125 | `GCD`, `IsPrime`, `EulerPhi` |
+| `Geometry` | Euclidean shapes, distance, area, volume | 58 | `CircleArea`, `TriangleArea`, `GoldenRatio` |
+| `LinearAlgebra` | Matrices, vectors, eigenvalues | 91 | `Determinant`, `Eigenvalue`, `Orthogonalize` |
+| `Probability` | Distributions, Bayes, entropy | 70 | `NormalDistribution`, `BayesTheorem`, `Entropy` |
+| `Statistics` | Descriptive and inferential statistics | 56 | `Mean`, `Variance`, `Regression` |
+| `Topology` | Topological spaces, invariants, manifolds | 56 | `EulerCharacteristic`, `IsTopology`, `FundamentalGroup` |
+| `Trigonometry` | Circular and hyperbolic functions | 45 | `Sin`, `Cos`, `GoldenAngle` |
+| `Forces` | Force systems, energy, momentum, drag | 92 | `NetForce`, `TerminalVelocity`, `DragForce` |
+| `Physics_Energy` | Kinetic, potential, mechanical energy | 67 | `KineticEnergy`, `RotationalKE`, `PowerOutput` |
+| `Physics_Momentum` | Linear and angular momentum, impulse | 39 | `Momentum`, `Impulse`, `AngularMomentum` |
+| `Physics_Springs` | Spring systems, oscillation, resonance | 44 | `SpringForce`, `NaturalFrequency`, `DampingRatio` |
+| `Physics_Collisions` | Elastic and inelastic collisions | 22 | `ElasticCollision`, `CoefficientOfRestitution` |
+| `Physics_CenterOfMass` | Centre of mass for systems and bodies | 64 | `CenterOfMass`, `MomentOfInertia` |
+| `Physics_1D` | 1D kinematics | 30 | `Velocity`, `GetDisplacement`, `FinalVelocity` |
+| `Physics_2D` | 2D vectors, projectile motion | 59 | `AddVectors`, `ProjectileRange`, `DotProduct` |
+| `Physics_3D` | 3D vectors, projectile motion | 55 | `IJK`, `CrossProduct`, `DragForce` |
 
 ---
 
-## Module Reference
+## Installation and Requirements
 
-### BasicMath
+```
+Python 3.10+      (match/case syntax required)
+Pillow            (pip install Pillow — required for art engine only)
+```
 
-Simple arithmetic functions that accept a starting value and any number of additional values.
+No other external dependencies.
 
 ```python
+# Math layer — no dependencies
 from MathTypes.Basic import BasicMath
-from Config import Checks, RNG
-
-BasicMath.add(10, 2, 3, 4)    # 19
-BasicMath.sub(20, 3, 2)       # 15
-BasicMath.multi(2, 3, 4)      # 24
-BasicMath.div(100, 2, 5)      # 10.0
-BasicMath.mod(17, 5)          # 2
-Checks.IsEven(42)             # True
-RNG.rand(1, 10)               # Random int between 1 and 10
-```
-
-| Function | Description |
-|----------|-------------|
-| `add(start, *args)` | Adds all values to the starting number |
-| `sub(start, *args)` | Subtracts each value from the running total |
-| `multi(start, *args)` | Multiplies all values together |
-| `div(start, *args)` | Divides running total by each value — guarded against divide by zero |
-| `mod(base, var)` | Returns base % var |
-| `Checks.IsEven(var)` | Returns True if var is even |
-| `RNG.rand(mi, ma)` | Returns a random integer between mi and ma |
-
----
-
-### Physics_1D
-
-One-dimensional kinematics. All functions operate on scalars along a single axis.
-
-```python
-from MathTypes.Physics import Physics_1D
-
-Physics_1D.GetDistance(0, 50)                        # 50.0
-Physics_1D.Velocity(100, 5)                          # 20.0  (m/s)
-Physics_1D.FinalVelocity(9.8, 10, 2, 0)             # 19.6  (m/s)
-Physics_1D.GetDisplacement(9.8, 3, 0)               # 44.1  (m)
-```
-
-| Function | Formula | Description |
-|----------|---------|-------------|
-| `GetDistance(loc1, loc2)` | `loc2 - loc1` | Distance between two positions |
-| `GetTime(t1, t2)` | `t2 - t1` | Elapsed time between two moments |
-| `Velocity(d, t)` | `d / t` | Speed from distance and time |
-| `FinalVelocity(a, d, t, v0)` | `v0 + a*t` | Final speed after accelerating |
-| `Acceleration(v1, v2, t)` | `(v2-v1) / t` | Average acceleration |
-| `InstantAcceleration(v1, v2, t)` | `(v2-v1) / t` | Instantaneous acceleration |
-| `ConstantAcceleration(v1, v2, t)` | `(v2-v1) / t` | Acceleration assumed constant |
-| `GetDisplacement(a, t, v0)` | `v0*t + ½at²` | Displacement from rest or initial speed |
-| `GetPosition(a, t, v0, x0)` | `x0 + v0*t + ½at²` | Absolute position after motion |
-
----
-
-### Physics_2D
-
-Two-dimensional vector operations and projectile motion. All vectors are described by magnitude and angle in degrees.
-
-```python
-from MathTypes.Physics import Physics_2D
-
-Physics_2D.IHat(50, 30)                              # X component
-Physics_2D.IJ(50, 30)                               # (X, Y) tuple
-Physics_2D.AddVectors(30, 45, 20, 90)               # Resultant vector tuple
-Physics_2D.ProjectileRange(20, 45, 2.04, 0.5)       # Horizontal range
-```
-
-**Vector Operations**
-
-| Function | Description |
-|----------|-------------|
-| `IHat(a, angle)` | X component — `a * cos(angle)` |
-| `JHat(a, angle)` | Y component — `a * sin(angle)` |
-| `IJ(a, angle)` | Both X and Y components as a tuple |
-| `VectorMagnitude(a, angle)` | Scalar magnitude — `sqrt(x²+y²)` |
-| `AddVectors(a, aA, b, aB)` | Sum of two vectors as a tuple |
-| `SubtractVectors(a, aA, b, aB)` | Difference of two vectors |
-| `DotProduct(a, aA, b, aB)` | Scalar dot product — `ax*bx + ay*by` |
-| `CrossProduct(a, aA, b, aB)` | Scalar cross product — `ax*by - ay*bx` |
-| `ScalarMultiply(c, a, angle)` | Scale vector by a constant |
-| `ScalarDivide(c, a, angle)` | Divide vector by a constant |
-| `NormalizeVector(a, angle)` | Unit vector — length scaled to 1 |
-| `VectorProjection(a, aA, b, aB)` | Scalar projection of a onto b |
-| `Position2D(x, y)` | 2D position vector tuple |
-
-**Projectile Motion**
-
-| Function | Description |
-|----------|-------------|
-| `ProjectileVelocity(speed, angle, t, mass)` | Velocity vector at time t |
-| `ProjectilePosition(speed, angle, t, mass)` | Position at time t |
-| `ProjectileRange(speed, angle, t, mass)` | Horizontal distance traveled |
-| `ProjectileMaxHeight(speed, angle, mass)` | Peak height reached |
-| `ProjectilePath(speed, angle, t, mass, steps)` | Full path with air resistance as list of (x,y) |
-| `ProjectilePathNoAR(speed, angle, t, steps)` | Full path without drag as list of (x,y) |
-
----
-
-### Physics_3D
-
-Three-dimensional extension of Physics_2D. Vectors are described by magnitude, horizontal angle (θ), and vertical elevation angle (φ).
-
-```python
-from MathTypes.Physics import Physics_3D
-
-Physics_3D.IJK(50, 45, 30)                          # (X, Y, Z) tuple
-Physics_3D.CrossProduct(30, 45, 0, 20, 90, 0)       # 3D cross product tuple
-Physics_3D.ProjectileMaxHeight(20, 45, 0.5)         # Peak height
-```
-
-Includes all vector operations from Physics_2D extended to three dimensions plus:
-
-| Function | Description |
-|----------|-------------|
-| `KHat(a, angle, phi)` | Z component — `a * sin(phi) * cos(angle)` |
-| `IJK(a, angle, phi)` | All three components as a tuple |
-| `DragForce(mass, vx, vy)` | Drag force components acting on a moving object |
-| `Position3D(x, y, z)` | 3D position vector tuple |
-
----
-
-### Forces
-
-A complete force physics system built around `Force2D`, `Force3D`, `Forces2D`, and `Forces3D` objects. Supports building multi-force scenarios and querying energy, momentum, equilibrium, and more.
-
-```python
+from MathTypes.Physics import Physics_1D, Physics_2D, Physics_3D
 from MathTypes.Physics.Forces import Force2D, Forces2D
-from MathTypes.Physics.Forces import Force3D, Forces3D
-from MathTypes.Physics.Forces import TerminalVelocity, DragForce, IsAtTerminalVelocity
+from MathTypes import Algebra, Calculus, Statistics, Trigonometry
+# ... and so on for any module
+
+# Art engine — requires Pillow
+from MathCodeEngine import MathCodeEngine
 ```
-
-#### Force2D and Force3D — Individual Force Objects
-
-Represent a single force. Constructed either from components or from magnitude and angle.
-
-```python
-# From components
-f = Force2D(10, 5)              # 10N right, 5N up — magnitude and angle auto-derived
-
-# From magnitude and angle
-f = Force2D(0, 0, 45, 20)      # 20N at 45 degrees — components auto-derived
-```
-
-| Property | Description |
-|----------|-------------|
-| `f.x` | X component (N) |
-| `f.y` | Y component (N) |
-| `f.magnitude` | Total force strength (N) |
-| `f.angle` | Direction in degrees |
-
-`Force3D` adds `f.z` and `f.phi` for the vertical elevation angle.
-
-#### Forces2D and Forces3D — Multi-Force Systems
-
-Hold a list of Force objects acting on a single physical object. Mass and gravity are assigned to the object, not the forces.
-
-```python
-obj          = Forces2D(mass=5.0, g=9.8)   # Create object with mass and gravity
-obj.velocity = 3.0                          # Set current velocity for KE and momentum
-obj.height   = 2.0                          # Set current height for PE
-obj.forces.append(Force2D(10, 0))           # Apply a 10N rightward force
-obj.ApplyGravity()                          # Add Fg = mg downward to the force list
-obj.SetIncline(30)                          # Recalculate normal force for a 30° slope
-```
-
-**Query Methods**
-
-| Method | Returns |
-|--------|---------|
-| `NetForce()` | Resultant force as a Force2D or Force3D object |
-| `NetAcceleration()` | `a = F_net / mass` in m/s² |
-| `NetMomentum()` | `p = mv` in kg·m/s |
-| `NetKineticEnergy()` | `KE = ½mv²` in J |
-| `NetPotentialEnergy()` | `PE = mgh` in J |
-| `NetMechanicalEnergy()` | `ME = KE + PE` in J |
-| `NetImpulse(t)` | `J = F_net * t` in N·s |
-| `UpdateVelocity(t)` | Advances velocity by `v = v + at` over time t |
-| `IsStaticEquilibrium()` | True if ΣF = 0 and v = 0 |
-| `IsDynamicEquilibrium()` | True if ΣF = 0 and v ≠ 0 |
-
-**Standalone Force Utilities**
-
-```python
-from MathTypes.Physics.Forces import (
-    Force, Acceleration, Mass,
-    FrictionForce, NormalForce,
-    TerminalVelocity, DragForce, IsAtTerminalVelocity
-)
-```
-
-| Function | Formula | Description |
-|----------|---------|-------------|
-| `Force(m, a)` | `F = ma` | Net force from mass and acceleration |
-| `Acceleration(F, m)` | `a = F/m` | Acceleration from force and mass |
-| `Mass(F, a)` | `m = F/a` | Mass from force and acceleration |
-| `FrictionForce(mu, Fn)` | `Ff = μ * Fn` | Friction force |
-| `NormalForce(m, g)` | `Fn = mg` | Normal force on flat surface |
-| `TerminalVelocity(m, A, Cd, rho, g)` | `vt = sqrt(2mg / ρACd)` | Maximum fall speed through a fluid |
-| `DragForce(v, A, Cd, rho)` | `Fd = ½ρv²ACd` | Drag at a given velocity |
-| `IsAtTerminalVelocity(v, m, A, Cd, rho, g)` | `v ≈ vt` | True if within 1% of terminal velocity |
 
 ---
 
-## Debug UI
+## The Art Engine
 
-MathCore includes an interactive console Debug UI for every module. Each function runs a numbered menu, collects inputs, and prints the result.
+Every calculation feeds a deterministic generative art system. The result value, the function name, and the exact inputs you entered all drive how the artwork looks — not just what seed it uses.
+
+### How the math maps to visuals
+
+**Function class → stroke vocabulary**
+
+Functions are classified by mathematical character. Each class has a primary visual vocabulary:
+
+| Class | Functions | Strokes |
+|-------|-----------|---------|
+| `periodic` | Sin, Cos, Frequency, Amplitude | wave, spiral, orbit |
+| `differential` | Derivative, Gradient, Tangent | vector, radial — highly directional |
+| `geometric` | GoldenRatio, Area, CircleArea | polygon, arc, orbit |
+| `combinatorial` | Factorial, Permutation, CatalanNumber | tree, radial, lattice |
+| `dynamic` | KineticEnergy, Velocity, Force | vector, wave, line |
+| `topological` | EulerCharacteristic, Manifold, Knot | orbit, curve, spiral |
+| `probabilistic` | Entropy, BayesTheorem, Markov | scatter, dot — omnidirectional |
+| `statistical` | NormalDistribution, Variance, Mean | scatter, arc, curve |
+| `algebraic` | Eigenvalue, Determinant, Polynomial | lattice, polygon |
+| `recursive` | Fibonacci, PowerSeries, Recurrence | tree, spiral |
+
+**Result value → visual parameters**
+
+The numeric result modulates:
+- **Frequency** — high result = dense, rapid strokes; low result = slow, expansive
+- **Size bias** — large result = strokes fill the canvas; small = tight cluster
+- **Angle bias** — result maps to a preferred compass direction, making pieces feel directed by the math
+- **Focal spread** — geometric functions cluster tightly; statistical functions spread wide
+- **Alpha scale** — large results produce more opaque, heavier strokes
+
+**Input values → composition**
+
+The actual named inputs you entered (not just their hash) drive compositional geometry:
+- First input value → focal point x-offset from centre
+- Second input value → focal point y-offset from centre
+- `KineticEnergy(mass=20, velocity=0.5)` and `KineticEnergy(mass=0.1, velocity=50)` produce the same energy value but different compositions — the mass vs velocity balance shifts the focal point
+
+**Profile → color palette and stroke weight**
+
+Profiles provide the available color menu and stroke thickness/opacity ranges. The math decides what to order from that menu.
+
+**Math → which colors are actually used**
+
+Six color distribution patterns, each driven by function class and result:
+
+| Pattern | Used by | Effect |
+|---------|---------|--------|
+| `focused` | geometric, algebraic | One color dominates at 4–6× weight |
+| `dual` | differential, dynamic | Two colors compete equally |
+| `spread` | probabilistic, statistical | All colors uniform — no preference |
+| `oscillating` | periodic | Colors cycle in a wave, phase from result |
+| `gradient` | topological | Smooth falloff from dominant color |
+| `cascade` | combinatorial, recursive | Exponential dropoff like factorial growth |
+
+The same profile applied to a `Sin` function and a `GoldenRatio` function will produce different color distributions even with the same seed — because the math is ordering different things from the same color menu.
+
+### Output
+
+- Default resolution: **3000×3000px** (print-quality — 10×10" at 300dpi)
+- Set `MATHCODE_SIZE=512` env var for fast preview renders
+- Compositional gravity: 20% anchor strokes near focal point, 50% mid-field, 30% scatter
+- All stroke sizes and thicknesses scale proportionally with canvas resolution
+- No background grid — clean output at any size
+
+---
+
+## Art Profiles
+
+Eight built-in visual profiles. Each provides a color palette and stroke character. The math drives which colors are used and in what proportion.
+
+| Profile | Palette | Stroke character | Best domains |
+|---------|---------|-----------------|--------------|
+| `neon_city` | Cyan, green, pink, yellow, purple on near-black | Thin, electric lines | Differential, algebraic |
+| `deep_space` | Purple, cyan, white, pink on deep black | Orbital, circular, cosmic | Physics, topological, probabilistic |
+| `solar_flare` | Yellow, orange, red, pink, white on dark red-black | Thick directional waves | Dynamic, periodic |
+| `ice_grid` | Cyan, white, purple on dark blue | Thin lattice and polygon | Algebraic, geometric |
+| `organic` | Green, yellow, orange, white on dark green | Flowing tree branches and curves | Combinatorial, recursive |
+| `monochrome` | White greys on black | Clean lines, arcs, spirals | Geometric, differential |
+| `chaos` | All seven palette colors equally | All stroke types equally | Any |
+| `default` | Multi-color | Balanced mix | Any |
+
+---
+
+## The UI
+
+MathCore includes a full graphical interface and a floating art monitor.
+
+### MathCoreUI
+
+A Tkinter application exposing all 23 modules and 1,364 functions through a searchable sidebar.
+
+- Navigate by module via the left panel
+- Enter function inputs in labelled fields
+- View step-by-step working where available
+- Every calculation immediately triggers an art generation
+- Art profile can be changed or randomized at any time
+- Results are shown in a scrollable output panel with syntax highlighting
+
+### MathCodeMonitor
+
+A floating, always-on-top art monitor that sits alongside the calculator.
+
+- Displays each new piece at 400px with LANCZOS downscaling from 3000px source
+- Thumbnail strip shows history of all pieces generated in the session
+- Click any thumbnail to review a past piece with its metadata
+- Regen button re-queues the current piece's seed with a new profile — preserves all mathematical composition parameters, only the visual style changes
+- Export button saves the full 3000px PNG to the session folder
+- Piece metadata includes: seed, domain, function, function class, input values, rarity, complexity, stroke types, and active profile
+
+### Rarity system
+
+Each piece receives a rarity rating based on a seed-derived probability roll, bumped one tier if the piece has genuine structural complexity.
+
+| Tier | Probability | Criteria |
+|------|------------|---------|
+| Common | 50% | Base roll |
+| Uncommon | 25% | Base roll |
+| Rare | 15% | Base roll or structural bump |
+| Ultra Rare | 8% | Base roll or structural bump |
+| Legendary | 2% | Base roll or structural bump |
+
+---
+
+## Usage Examples
 
 ```python
-from DebugUI import (
-    BasicMathDebug,
-    Physics1DDebug,
-    Physics2DDebug,
-    Physics3DDebug,
-    Forces2DDebug,
-    Forces3DDebug
+# ── Calculation layer ────────────────────────────────────────────────────────
+
+from MathTypes.Basic import BasicMath
+BasicMath.add(10, 2, 3, 4)       # 19
+BasicMath.div(100, 2, 5)         # 10.0
+
+from MathTypes.Physics import Physics_1D
+Physics_1D.GetDisplacement(9.8, 3, 0)    # 44.1
+
+from MathTypes import Statistics
+Statistics.Mean(2, 4, 6, 8, 10)          # 6.0
+Statistics.NormalDistribution(0, 1, 0)   # 0.3989
+
+from MathTypes import Trigonometry
+Trigonometry.Sin(45)                     # 0.7071
+Trigonometry.GoldenAngle()              # 137.5077...
+
+from MathTypes import Combinatorics
+Combinatorics.Factorial(7)              # 5040
+Combinatorics.BinomialCoefficient(10, 3)  # 120
+
+from MathTypes.Physics.Forces import Force2D, Forces2D
+obj = Forces2D(5.0, 9.8)
+obj.velocity = 3.0
+obj.height   = 2.0
+obj.ApplyGravity()
+obj.forces.append(Force2D(0, 0, 0, 15))
+print(obj.NetKineticEnergy())            # J
+print(obj.IsStaticEquilibrium())         # False
+
+# ── Art engine — standalone ──────────────────────────────────────────────────
+
+from MathCodeEngine import MathCodeEngine, set_profile
+
+engine = MathCodeEngine()
+engine.start()
+
+# Feed a result directly
+engine.feed(
+    result_value = 160.0,              # KE = 0.5 * 5 * 8² = 160J
+    domain       = 'Physics — Energy',
+    fn_name      = 'KineticEnergy',
+    inputs       = {'mass': 5.0, 'velocity': 8.0},
 )
 
-BasicMathDebug()    # Interactive arithmetic tester
-Physics1DDebug()    # Interactive kinematics tester
-Physics2DDebug()    # Interactive 2D vector and projectile tester
-Physics3DDebug()    # Interactive 3D vector and projectile tester
-Forces2DDebug()     # Step-through 2D force scenario builder
-Forces3DDebug()     # Step-through 3D force scenario builder
+# The engine renders asynchronously — register a callback for new pieces
+def on_new_piece(piece):
+    print(f'{piece.rarity} | {piece.domain} | seed {piece.seed}')
+    piece.save_png()   # saves to mathcode_art/ session folder
+
+engine.on_new_piece = on_new_piece
+
+# Change profile at any time
+set_profile('deep_space')
+
+# ── Full UI ──────────────────────────────────────────────────────────────────
+
+from MathCoreUI import MathCoreApp
+app = MathCoreApp()
+app.mainloop()
 ```
-
-`Forces2DDebug` and `Forces3DDebug` walk through three guided steps:
-
-1. **Describe your object** — mass, gravity, velocity, height, optional incline
-2. **Add forces** — by components or by magnitude and angle, with optional gravity
-3. **Query the system** — net force, acceleration, energy, momentum, equilibrium, drag
-
-The `CollectVariables()` helper used by BasicMathDebug supports adding, removing, and confirming an unlimited list of numbers before calculating.
 
 ---
 
@@ -287,6 +272,11 @@ MathTypes/
 │   ├── Physics_1D.py
 │   ├── Physics_2D.py
 │   ├── Physics_3D.py
+│   ├── Physics_Energy.py
+│   ├── Physics_Momentum.py
+│   ├── Physics_Springs.py
+│   ├── Physics_Collisions.py
+│   ├── Physics_CenterOfMass.py
 │   ├── Forces/
 │   │   ├── Force2D.py
 │   │   ├── Force3D.py
@@ -295,54 +285,39 @@ MathTypes/
 │   │   ├── Utilities.py
 │   │   └── __init__.py
 │   └── __init__.py
+├── Algebra.py
+├── AbstractAlgebra.py
+├── AlgebraicGeometry.py
+├── Calculus.py
+├── Combinatorics.py
+├── DifferentialGeometry.py
+├── Differentiation.py
+├── DiscreteMath.py
+├── Geometry.py
+├── LinearAlgebra.py
+├── Probability.py
+├── Statistics.py
+├── Topology.py
+├── Trigonometry.py
+└── __init__.py
 Config/
 ├── Checks.py
 ├── RNG.py
 └── __init__.py
-DebugUI.py
-```
-
----
-
-## Example Usage
-
-```python
-# ---- BasicMath ----
-from MathTypes.Basic import BasicMath
-print(BasicMath.add(10, 2, 3, 4))       # 19
-print(BasicMath.div(100, 2, 5))         # 10.0
-
-# ---- Physics 1D ----
-from MathTypes.Physics import Physics_1D
-print(Physics_1D.GetDisplacement(9.8, 3, 0))   # 44.1
-
-# ---- Physics 2D ----
-from MathTypes.Physics import Physics_2D
-print(Physics_2D.IJ(50, 45))           # (35.355, 35.355)
-print(Physics_2D.ProjectileRange(20, 45, 2.04, 0.5))
-
-# ---- Forces 2D ----
-from MathTypes.Physics.Forces import Force2D, Forces2D
-
-obj = Forces2D(5.0, 9.8)
-obj.velocity = 3.0
-obj.height   = 2.0
-obj.ApplyGravity()
-obj.forces.append(Force2D(0, 0, 0, 15))    # 15N rightward
-print(obj.NetAcceleration())               # m/s²
-print(obj.NetKineticEnergy())              # J
-print(obj.IsStaticEquilibrium())           # False
+MathCodeEngine.py       — generative art engine
+MathCodeMonitor.py      — floating art monitor (Tkinter)
+MathCoreUI.py           — main application UI (Tkinter)
+DebugUI.py              — console debug interface for all modules
+mathcode_art/           — session output folders (gitignored)
 ```
 
 ---
 
 ## Requirements
 
-- Python 3.10+  *(match/case syntax required)*
-- No external dependencies
+| Requirement | Purpose |
+|-------------|---------|
+| Python 3.10+ | match/case syntax throughout |
+| Pillow | Art engine rendering (optional — engine falls back to tkinter canvas without it) |
 
----
-
-## Summary
-
-MathCore is a dependency-free math and physics engine built for readability, correctness, and reuse. It covers arithmetic through full 3D force physics in a consistent, well-guarded API with an interactive Debug UI for every module — ready to import into any Python project.
+No other dependencies. Install Pillow with `pip install Pillow`.
