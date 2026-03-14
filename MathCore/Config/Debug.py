@@ -6,14 +6,10 @@ import re
 import math
 import textwrap
 
-import Config                                              # Validation and RNG
 from MathTypes.Basic import BasicMath                      # Basic arithmetic operations
 from MathTypes.Physics import Physics_1D                   # 1D kinematics
 from MathTypes.Physics import Physics_2D                   # 2D vectors and projectiles
 from MathTypes.Physics import Physics_3D                   # 3D vectors and projectiles
-import MathTypes.Physics.Physics_Energy as PEnergy         # Energy, work, power, IsWork
-import MathTypes.Physics.Physics_Springs as PSprings       # Springs, SHM, Hooke's law
-import MathTypes.Physics.Physics_Momentum as PMomentum     # Momentum, impulse, center of mass
 import MathTypes.Physics.Forces as Forces                  # Forces, friction, tension, circular motion
 import MathTypes.Basic.Algebra as Algebra                  # Algebra functions
 import MathTypes.Basic.Geometry as Geometry                # Geometry functions
@@ -24,11 +20,16 @@ import MathTypes.Advanced.Statistics as Stat               # Statistics function
 import MathTypes.Advanced.Probability as Prob              # Probability functions
 import MathTypes.Advanced.Combinatorics as Comb            # Combinatorics functions
 import MathTypes.Advanced.DiscreteMath as Discrete          # Discrete Mathematics functions
+import Config                                              # Validation and RNG
 import MathTypes.Advanced.LinearAlgebra as LinAlg          # Linear Algebra functions
 import MathTypes.Advanced.Differential as DiffGeo  # Differential Geometry functions
 import MathTypes.Advanced.AbstractAlgebra as AbsAlg        # Abstract Algebra functions
 import MathTypes.Advanced.Topology as Topo                 # Topology functions
 import MathTypes.Advanced.AlgebraicGeometry as AlgGeo      # Algebraic Geometry functions
+import MathTypes.Physics.Physics_Energy as PEnergy         # Energy, work, power, IsWork
+import MathTypes.Physics.Physics_Springs as PSprings       # Springs, SHM, Hooke's law
+import MathTypes.Physics.Physics_Momentum as PMomentum     # Momentum, impulse, center of mass
+import MathTypes.Physics.Physics_CenterOfMass as PCoM    # Center of mass, composite bodies, CoM frame
 
 
 # ============================================================
@@ -59,6 +60,15 @@ def _ask(prompt, cast=float, desc=None):
             if not raw:
                 if remaining:
                     print(f'  ✗  This field cannot be empty.  ({remaining} attempt{"s" if remaining != 1 else ""} left)')
+                continue
+            # ── Ripcord: ? opens the layered calculator ──────────────────────
+            if raw == '?':
+                result = _layered_calc()
+                if result is not None:
+                    try:
+                        return cast(result)
+                    except (ValueError, TypeError):
+                        return cast(str(result))
                 continue
             return cast(raw)
         except (ValueError, TypeError):
@@ -196,6 +206,168 @@ def _SectionHeader(title, subtitle=''):
     print(f"  ╚══════════════════════════════════════════╝")
     print()
 
+# ============================================================
+# FEATURE TOGGLES  (word problem mode, step display, layered calc)
+# ============================================================
+
+_STEP_MODE = False   # When True, all calculations print a step-by-step breakdown
+_WORD_MODE = False   # When True, functions offer a word-problem parser entry point
+
+# ── Step-by-step display ─────────────────────────────────────────────────────
+def _step(label, formula, substitution, result, unit=''):
+    """
+    Print a single calculation step in a formatted box.
+    Called when _STEP_MODE is True.
+      label        — short name of this step (e.g. 'Kinetic Energy')
+      formula      — the symbolic formula (e.g. 'KE = ½mv²')
+      substitution — values plugged in (e.g. '½ × 2.0 × 3.0²')
+      result       — numeric result (e.g. 9.0)
+      unit         — physical unit string (e.g. 'J')
+    """
+    if not _STEP_MODE:
+        return
+    W = 52
+    print(f'  ┌─ {label} {"─"*(W - len(label) - 4)}┐')
+    if formula:
+        print(f'  │  {formula:<{W-2}}│')
+    if substitution:
+        print(f'  │  = {substitution:<{W-4}}│')
+    res_str = f'{result:.6f} {unit}'.strip() if isinstance(result, float) else str(result)
+    print(f'  │  → {res_str:<{W-5}}│')
+    print(f'  └{"─"*W}┘')
+
+def _step_result(label, result, unit=''):
+    """Short single-line step display — just label and result."""
+    _step(label, '', '', result, unit)
+
+def _show_steps(steps):
+    """
+    Render a list of (label, formula, result) tuples from a StepByStep* function.
+    Only does anything when _STEP_MODE is True.
+    """
+    if not _STEP_MODE:
+        return
+    W = 52
+    print()
+    print(f'  ┌─ Step-by-step solution {"─"*(W-24)}┐')
+    for label, formula, result in steps:
+        if result:
+            print(f'  │  {label:<16}  {formula:<20}  = {result:<8}│'.ljust(W+4) + '│' if len(f'  │  {label:<16}  {formula:<20}  = {result}') < W+3 else f'  │  {label}: {formula} = {result}')
+        else:
+            print(f'  │  {label:<{W-2}}│')
+    print(f'  └{"─"*W}┘')
+    print()
+
+# ── Layered calculation ripcord ──────────────────────────────────────────────
+_CALC_HISTORY = []   # stores results from sub-calculations, most recent last
+
+def _layered_calc():
+    """
+    Opens a mini inline calculator when the user types ? during _ask().
+    Supports: arithmetic, common physics formulas, and previous results.
+    Returns the numeric result, or None if the user cancels.
+    """
+    print()
+    print('  ╔══════════════════════════════════════════╗')
+    print('  ║  ⊕  Quick Calculator  (ripcord)          ║')
+    print('  ║  Result will be returned as your value.  ║')
+    print('  ╚══════════════════════════════════════════╝')
+    print()
+    print('  (1)  Arithmetic expression  (type any math)')
+    print('  (2)  Previous results')
+    print('  (3)  ½ m v²  (kinetic energy)')
+    print('  (4)  m g h   (gravitational PE)')
+    print('  (5)  F · d · cos θ  (work)')
+    print('  (6)  √ of a number')
+    print('  (7)  a² + b²  →  c  (Pythagorean)')
+    print('  (8)  Unit conversion  (m↔cm↔mm, kg↔g, J↔kJ)')
+    print()
+    print('  (0)  Cancel — return to original prompt')
+    print()
+    try:
+        choice = _menu_int('  Choose: ')
+    except Exception:
+        return None
+    if choice == 0:
+        return None
+    try:
+        if choice == 1:
+            raw = input('  Expression (use Python syntax, e.g. 3**2 + 4**2): ').strip()
+            result = float(eval(raw, {'__builtins__': {}}, {
+                'sqrt': math.sqrt, 'pi': math.pi, 'sin': math.sin,
+                'cos': math.cos, 'tan': math.tan, 'log': math.log,
+                'exp': math.exp, 'abs': abs, 'round': round,
+            }))
+        elif choice == 2:
+            if not _CALC_HISTORY:
+                print('  No previous results yet.')
+                return None
+            print()
+            for i, (label, val) in enumerate(_CALC_HISTORY[-5:], 1):
+                print(f'    ({i})  {label}  =  {val}')
+            print()
+            idx = _menu_int('  Pick result (or 0 to cancel): ')
+            if idx == 0 or idx < 1 or idx > min(5, len(_CALC_HISTORY)):
+                return None
+            _, result = _CALC_HISTORY[-5:][idx - 1]
+        elif choice == 3:
+            m = float(input('  m (kg): '))
+            v = float(input('  v (m/s): '))
+            result = 0.5 * m * v**2
+            print(f'  KE = ½ × {m} × {v}² = {result:.6f} J')
+        elif choice == 4:
+            m = float(input('  m (kg): ')); g = float(input('  g (m/s², Enter=9.8): ') or '9.8')
+            h = float(input('  h (m): '))
+            result = m * float(g) * h
+            print(f'  GPE = {m} × {g} × {h} = {result:.6f} J')
+        elif choice == 5:
+            F = float(input('  F (N): ')); d = float(input('  d (m): '))
+            th = float(input('  θ (deg, 0 if parallel): ') or '0')
+            result = F * d * math.cos(math.radians(float(th)))
+            print(f'  W = {F} × {d} × cos({th}°) = {result:.6f} J')
+        elif choice == 6:
+            x = float(input('  Number: '))
+            result = math.sqrt(x)
+            print(f'  √{x} = {result:.6f}')
+        elif choice == 7:
+            a = float(input('  a: ')); b = float(input('  b: '))
+            result = math.sqrt(a**2 + b**2)
+            print(f'  c = √({a}² + {b}²) = {result:.6f}')
+        elif choice == 8:
+            print('  (1) m→cm  (2) cm→m  (3) kg→g  (4) g→kg  (5) J→kJ  (6) kJ→J')
+            conv = _menu_int('  Choose: ')
+            val  = float(input('  Value: '))
+            table = {1:(val*100,'cm'), 2:(val/100,'m'), 3:(val*1000,'g'),
+                     4:(val/1000,'kg'), 5:(val/1000,'kJ'), 6:(val*1000,'J')}
+            result, unit = table.get(conv, (val,'?'))
+            print(f'  = {result} {unit}')
+        else:
+            return None
+        _CALC_HISTORY.append((f'calc {len(_CALC_HISTORY)+1}', result))
+        print(f'\n  ✓  Using  {result:.6f}  as your value.')
+        print()
+        return result
+    except Exception as e:
+        print(f'  ✗  Calculator error: {e}')
+        return None
+
+# ── Word problem mode toggle ─────────────────────────────────────────────────
+def _toggle_step_mode():
+    """Toggle the global step-by-step display on/off."""
+    global _STEP_MODE
+    _STEP_MODE = not _STEP_MODE
+    print(f'\n  Step-by-step display: {"ON ✓" if _STEP_MODE else "OFF"}')
+
+def _toggle_word_mode():
+    """Toggle the global word-problem parsing mode on/off."""
+    global _WORD_MODE
+    _WORD_MODE = not _WORD_MODE
+    print(f'\n  Word-problem mode: {"ON ✓" if _WORD_MODE else "OFF"}')
+
+# ============================================================
+# COLLECT VARIABLES
+# ============================================================
+
 def CollectVariables():
     """
     Collects an unlimited list of numbers from the user.
@@ -293,10 +465,22 @@ def Debug():
         print('  (17)  Physics — Energy & Work')
         print('  (18)  Physics — Springs & SHM')
         print('  (19)  Physics — Momentum & Impulse')
+        print('  (20)  Physics — Center of Mass')
+        print()
+        print('  (S)  Toggle step-by-step display  ', end='')
+        print(f'[{"ON ✓" if _STEP_MODE else "off"}]')
+        print('  (W)  Toggle word-problem mode      ', end='')
+        print(f'[{"ON ✓" if _WORD_MODE else "off"}]')
         print()
         _ExitBar('Exit MathCore Debug')
         print()
-        MathType = _menu_int('  Choose a math type: ')
+        raw_choice = input('  Choose a math type: ').strip()
+        if raw_choice.upper() == 'S': _toggle_step_mode(); continue
+        if raw_choice.upper() == 'W': _toggle_word_mode(); continue
+        try:
+            MathType = int(raw_choice) if raw_choice else -1
+        except ValueError:
+            MathType = -1
         if MathType == 0:
             print()
             print('  Exiting MathCore Debug.')
@@ -322,6 +506,7 @@ def Debug():
             case 17: PhysicsEnergyDebug()
             case 18: PhysicsSpringsDebug()
             case 19: PhysicsMomentumDebug()
+            case 20: CenterOfMassDebug()
             case _:  print('\n  That was not a valid option. Please try again.')
 
 # ============================================================
@@ -8684,6 +8869,693 @@ def PhysicsMomentumDebug():
                             mp=_ask('  Payload mass (kg): ',cast=float)
                             print(f'\n  Propellant = {PMomentum.RocketPropellantMass(dv, vex, mp):.4f} kg')
                         case _: print('\n  That was not a valid option.'); continue
+            except _AskAbort:
+                print()
+                _p('Calculation cancelled. Returning to the function list.')
+                print()
+                continue
+            except Exception as e:
+                print(f'\n  Error: {e}')
+                print()
+                continue
+            print()
+
+# ============================================================
+# CENTER OF MASS DEBUG
+# ============================================================
+
+def CenterOfMassDebug():
+    SECTIONS = [
+        'Discrete CoM — 1D',
+        'Discrete CoM — 2D',
+        'Discrete CoM — 3D',
+        'Continuous Bodies',
+        'Composite Bodies',
+        'CoM in Motion (explosion, velocity, trajectory)',
+        'Center of Mass Frame',
+        'Moment of Inertia & Parallel Axis',
+        'Word Problem Solver',
+    ]
+    # ── Word problem mode entry point ──────────────────────────────────────────
+    def _maybe_word_problem_1d():
+        """If word mode is on, offer to parse a problem sentence before manual entry."""
+        if not _WORD_MODE:
+            return None
+        print()
+        print('  Word-problem mode is ON.')
+        print('  Paste a 1D CoM problem sentence and I\'ll extract the values,')
+        print('  or press Enter to enter values manually.')
+        print()
+        raw = input('  Problem: ').strip()
+        if not raw:
+            return None
+        r = PCoM.ParseCoMProblem1D(raw)
+        if r is None:
+            print('  ✗  Could not parse that sentence. Switching to manual entry.')
+            return None
+        print(f'\n  ✓  Parsed {len(r["masses"])} particle(s):')
+        for i, (m, x) in enumerate(zip(r['masses'], r['positions']), 1):
+            print(f'    Particle {i}: m={m} kg  at  x={x} m')
+        _show_steps(PCoM.StepByStepCoM1D(r['masses'], r['positions']))
+        print(f'\n  x_cm = {r["x_cm"]:.6f} m')
+        print()
+        return r
+
+    def _maybe_word_problem_2d():
+        if not _WORD_MODE:
+            return None
+        print()
+        print('  Word-problem mode is ON.')
+        print('  Paste a 2D CoM problem (e.g. "3 kg at (1,2) and 5 kg at (4,6)"),')
+        print('  or press Enter to enter values manually.')
+        print()
+        raw = input('  Problem: ').strip()
+        if not raw:
+            return None
+        r = PCoM.ParseCoMProblem2D(raw)
+        if r is None:
+            print('  ✗  Could not parse. Switching to manual entry.')
+            return None
+        print(f'\n  ✓  Parsed {len(r["masses"])} particle(s):')
+        for i, (m, p) in enumerate(zip(r['masses'], r['points']), 1):
+            print(f'    Particle {i}: m={m} kg  at  ({p[0]}, {p[1]}) m')
+        _show_steps(PCoM.StepByStepCoM2D(r['masses'], r['points']))
+        print(f'\n  CoM = ({r["x_cm"]:.6f}, {r["y_cm"]:.6f}) m')
+        print()
+        return r
+
+    def _collect_particles_1d():
+        """Gather n masses and positions from the user."""
+        n = _ask('  Number of particles: ', cast=int)
+        masses = []; positions = []
+        for i in range(n):
+            print(f'\n  Particle {i+1}:')
+            m = _ask(f'    Mass m{i+1} (kg): ', cast=float)
+            x = _ask(f'    Position x{i+1} (m): ', cast=float)
+            masses.append(m); positions.append(x)
+        return masses, positions
+
+    def _collect_particles_2d():
+        n = _ask('  Number of particles: ', cast=int)
+        masses = []; points = []
+        for i in range(n):
+            print(f'\n  Particle {i+1}:')
+            m = _ask(f'    Mass m{i+1} (kg): ', cast=float)
+            x = _ask(f'    x{i+1} (m): ', cast=float)
+            y = _ask(f'    y{i+1} (m): ', cast=float)
+            masses.append(m); points.append((x, y))
+        return masses, points
+
+    def _collect_particles_3d():
+        n = _ask('  Number of particles: ', cast=int)
+        masses = []; points = []
+        for i in range(n):
+            print(f'\n  Particle {i+1}:')
+            m = _ask(f'    Mass m{i+1} (kg): ', cast=float)
+            x = _ask(f'    x{i+1} (m): ', cast=float)
+            y = _ask(f'    y{i+1} (m): ', cast=float)
+            z = _ask(f'    z{i+1} (m): ', cast=float)
+            masses.append(m); points.append((x, y, z))
+        return masses, points
+
+    while True:
+        _SectionHeader('Physics — Center of Mass', 'Choose a section')
+        for i, s in enumerate(SECTIONS, 1):
+            print(f'  ({i})  {s}')
+        print()
+        if _STEP_MODE: print('  [Step-by-step: ON]')
+        if _WORD_MODE: print('  [Word-problem mode: ON]')
+        print()
+        _ExitBar('Return to main menu')
+        print()
+        sec = _menu_int('  Select a section: ')
+        if sec == 0: return
+        if sec < 1 or sec > len(SECTIONS):
+            print('\n  That was not a valid section.')
+            continue
+
+        while True:
+            _SectionHeader('Center of Mass', SECTIONS[sec - 1])
+            if sec == 1:
+                print('  (1)  x_cm = Σmᵢxᵢ / M')
+                print('  (2)  Find missing particle position given desired x_cm')
+                print('  (3)  CoM measured from a custom reference point')
+                print('  (4)  Two-body CoM  (fast form)')
+                print('  (5)  Distances of each particle from CoM')
+                print('  (6)  Balance / fulcrum point')
+            elif sec == 2:
+                print('  (1)  (x_cm, y_cm) from n particles')
+                print('  (2)  CoM of a triangle  (3 vertices)')
+                print('  (3)  CoM of a polygon  (n vertices)')
+                print('  (4)  Distances from CoM  (2D)')
+                print('  (5)  CoM relative to a reference point  (2D)')
+            elif sec == 3:
+                print('  (1)  (x_cm, y_cm, z_cm) from n particles')
+                print('  (2)  CoM of a tetrahedron  (4 vertices)')
+                print('  (3)  Distances from CoM  (3D)')
+            elif sec == 4:
+                print('  (1)  Uniform rod')
+                print('  (2)  Rod with variable linear density λ(x)')
+                print('  (3)  Uniform rectangle')
+                print('  (4)  Right triangle')
+                print('  (5)  Solid semicircle  (y_cm = 4r/3π)')
+                print('  (6)  Semicircular arc / wire  (y_cm = 2r/π)')
+                print('  (7)  Solid hemisphere  (3r/8)')
+                print('  (8)  Hollow hemisphere  (r/2)')
+                print('  (9)  Solid cone  (h/4 from base)')
+                print('  (10) Quarter-circle')
+                print('  (11) Hollow conical shell  (h/3)')
+                print('  (12) Solid cylinder')
+            elif sec == 5:
+                print('  (1)  Composite body  1D  (sum of shapes with their CoM positions)')
+                print('  (2)  Composite body  2D')
+                print('  (3)  Composite body  3D')
+                print('  (4)  Rectangle with circular hole removed')
+                print('  (5)  Two sub-bodies  (dumbbell)')
+            elif sec == 6:
+                print('  (1)  CoM velocity  v_cm = Σmᵢvᵢ / M  (1D)')
+                print('  (2)  CoM velocity  (2D)')
+                print('  (3)  CoM acceleration  a_cm = F_ext / M')
+                print('  (4)  After explosion — find v2  (momentum conserved)')
+                print('  (5)  Displacement to keep CoM fixed  (only internal forces)')
+                print('  (6)  Verify momentum conservation after explosion')
+            elif sec == 7:
+                print('  (1)  CoM-frame velocities  (1D)')
+                print('  (2)  CoM-frame velocities  (2D)')
+                print('  (3)  KE in CoM frame  vs  KE in lab frame')
+                print('  (4)  Relative velocity  v_rel = v1 − v2')
+                print('  (5)  Reduced mass  μ = m1m2/(m1+m2)')
+                print('  (6)  KE of relative motion  ½μ v_rel²')
+            elif sec == 8:
+                print('  (1)  I = Σmᵢrᵢ²  (point masses)')
+                print('  (2)  Parallel axis theorem  I = I_cm + md²')
+                print('  (3)  Perpendicular axis theorem  I_z = I_x + I_y')
+                print('  (4)  I_cm lookup — common shapes')
+                print('  (5)  Composite moment of inertia')
+            elif sec == 9:
+                print('  Word-problem parser — type or paste a problem in plain English.')
+                print()
+                print('  (1)  1D CoM word problem')
+                print('  (2)  2D CoM word problem')
+                print('  (3)  Explosion / split word problem')
+            print()
+            _ExitBar('Return to sections')
+            print()
+            choice = _menu_int('  Select a function: ')
+            if choice == 0: break
+            if choice < 0:
+                print('\n  That was not a valid option.')
+                continue
+            try:
+                # ── SECTION 1: Discrete 1D ──────────────────────────────────────
+                if sec == 1:
+                    match choice:
+                        case 1:
+                            parsed = _maybe_word_problem_1d()
+                            if parsed is None:
+                                masses, positions = _collect_particles_1d()
+                            else:
+                                masses, positions = parsed['masses'], parsed['positions']
+                                print()
+                                continue
+                            _show_steps(PCoM.StepByStepCoM1D(masses, positions))
+                            x_cm = PCoM.CoM1D(masses, positions)
+                            _step('Center of Mass', 'x_cm = Σmᵢxᵢ / M',
+                                  f'{PCoM.MassWeightedSum1D(masses,positions)} / {sum(masses)}',
+                                  x_cm, 'm')
+                            print(f'\n  x_cm = {x_cm:.6f} m')
+                        case 2:
+                            print()
+                            _p('Given some particles and a total mass, this finds where the'
+                               ' unknown particle must be to achieve a target CoM.')
+                            masses_k = []; positions_k = []
+                            n = _ask('  Known particles: ', cast=int)
+                            for i in range(n):
+                                masses_k.append(_ask(f'  m{i+1} (kg): ', cast=float))
+                                positions_k.append(_ask(f'  x{i+1} (m): ', cast=float))
+                            M_total = _ask('  Total system mass M (kg): ', cast=float)
+                            x_cm_target = _ask('  Target CoM x_cm (m): ', cast=float)
+                            x_unknown = PCoM.MissingMassPosition1D(masses_k, positions_k, M_total, x_cm_target)
+                            m_unknown = M_total - sum(masses_k)
+                            _step('Missing position', 'x = (M·x_cm − Σmᵢxᵢ) / m_unknown',
+                                  f'({M_total}·{x_cm_target} − {PCoM.MassWeightedSum1D(masses_k,positions_k)}) / {m_unknown}',
+                                  x_unknown, 'm')
+                            print(f'\n  Unknown mass: {m_unknown:.4f} kg')
+                            print(f'  Must be at:   {x_unknown:.6f} m')
+                        case 3:
+                            masses, positions = _collect_particles_1d()
+                            ref = _ask('  Reference point x_ref (m): ', cast=float)
+                            x_cm_rel = PCoM.CoMFromReference1D(masses, positions, ref)
+                            print(f'\n  CoM relative to x={ref}: {x_cm_rel:.6f} m')
+                        case 4:
+                            m1=_ask('  m1 (kg): ',cast=float); x1=_ask('  x1 (m): ',cast=float)
+                            m2=_ask('  m2 (kg): ',cast=float); x2=_ask('  x2 (m): ',cast=float)
+                            x_cm = PCoM.SplitCoM1D(m1,x1,m2,x2)
+                            _step('Two-body CoM','x_cm = (m1·x1+m2·x2)/(m1+m2)',
+                                  f'({m1}·{x1}+{m2}·{x2})/({m1}+{m2})', x_cm, 'm')
+                            print(f'\n  x_cm = {x_cm:.6f} m')
+                        case 5:
+                            masses, positions = _collect_particles_1d()
+                            x_cm, dists = PCoM.CoMDistance1D(masses, positions)
+                            print(f'\n  x_cm = {x_cm:.6f} m')
+                            print('  Distances from CoM:')
+                            for i, (m, d) in enumerate(zip(masses, dists), 1):
+                                print(f'    Particle {i}  ({m} kg):  Δx = {d:+.6f} m')
+                        case 6:
+                            masses, positions = _collect_particles_1d()
+                            bp = PCoM.BalancePoint1D(masses, positions)
+                            print(f'\n  Fulcrum / balance point: x = {bp:.6f} m')
+                        case _: print('\n  That was not a valid option.'); continue
+
+                # ── SECTION 2: Discrete 2D ──────────────────────────────────────
+                elif sec == 2:
+                    match choice:
+                        case 1:
+                            parsed = _maybe_word_problem_2d()
+                            if parsed is None:
+                                masses, points = _collect_particles_2d()
+                            else:
+                                masses, points = parsed['masses'], parsed['points']
+                                print(); continue
+                            _show_steps(PCoM.StepByStepCoM2D(masses, points))
+                            x_cm, y_cm = PCoM.CoM2D(masses, points)
+                            _step('CoM 2D','(x_cm,y_cm)=Σmᵢ(xᵢ,yᵢ)/M','',
+                                  f'({x_cm:.4f}, {y_cm:.4f})','m')
+                            print(f'\n  CoM = ({x_cm:.6f}, {y_cm:.6f}) m')
+                        case 2:
+                            print('  Vertex 1:'); x1=_ask('    x: ',cast=float); y1=_ask('    y: ',cast=float)
+                            print('  Vertex 2:'); x2=_ask('    x: ',cast=float); y2=_ask('    y: ',cast=float)
+                            print('  Vertex 3:'); x3=_ask('    x: ',cast=float); y3=_ask('    y: ',cast=float)
+                            x_cm,y_cm = PCoM.CoMOfTriangle2D((x1,y1),(x2,y2),(x3,y3))
+                            _step('Triangle centroid','= (x1+x2+x3)/3, (y1+y2+y3)/3','',
+                                  f'({x_cm:.4f}, {y_cm:.4f})','m')
+                            print(f'\n  CoM = ({x_cm:.6f}, {y_cm:.6f}) m')
+                        case 3:
+                            n = _ask('  Number of vertices: ', cast=int)
+                            verts = []
+                            for i in range(n):
+                                x=_ask(f'  x{i+1}: ',cast=float); y=_ask(f'  y{i+1}: ',cast=float)
+                                verts.append((x,y))
+                            x_cm,y_cm = PCoM.CoMOfPolygon2D(verts)
+                            print(f'\n  Polygon CoM = ({x_cm:.6f}, {y_cm:.6f}) m')
+                        case 4:
+                            masses, points = _collect_particles_2d()
+                            x_cm,y_cm,dists = PCoM.DistanceFromCoM2D(masses, points)
+                            print(f'\n  CoM = ({x_cm:.6f}, {y_cm:.6f}) m')
+                            print('  Distances from CoM:')
+                            for i,(m,d) in enumerate(zip(masses,dists),1):
+                                print(f'    Particle {i}  ({m} kg):  r = {d:.6f} m')
+                        case 5:
+                            masses, points = _collect_particles_2d()
+                            rx=_ask('  Reference x: ',cast=float); ry=_ask('  Reference y: ',cast=float)
+                            x_cm,y_cm = PCoM.CoMFromReference2D(masses, points, (rx,ry))
+                            print(f'\n  CoM from ({rx},{ry}) = ({x_cm:.6f}, {y_cm:.6f}) m')
+                        case _: print('\n  That was not a valid option.'); continue
+
+                # ── SECTION 3: Discrete 3D ──────────────────────────────────────
+                elif sec == 3:
+                    match choice:
+                        case 1:
+                            masses, points = _collect_particles_3d()
+                            x_cm,y_cm,z_cm = PCoM.CoM3D(masses, points)
+                            print(f'\n  CoM = ({x_cm:.6f}, {y_cm:.6f}, {z_cm:.6f}) m')
+                        case 2:
+                            print('  Vertex 1:'); v1=(_ask('    x: ',cast=float),_ask('    y: ',cast=float),_ask('    z: ',cast=float))
+                            print('  Vertex 2:'); v2=(_ask('    x: ',cast=float),_ask('    y: ',cast=float),_ask('    z: ',cast=float))
+                            print('  Vertex 3:'); v3=(_ask('    x: ',cast=float),_ask('    y: ',cast=float),_ask('    z: ',cast=float))
+                            print('  Vertex 4:'); v4=(_ask('    x: ',cast=float),_ask('    y: ',cast=float),_ask('    z: ',cast=float))
+                            x_cm,y_cm,z_cm = PCoM.CoMOfTetrahedron3D(v1,v2,v3,v4)
+                            print(f'\n  Tetrahedron CoM = ({x_cm:.6f}, {y_cm:.6f}, {z_cm:.6f}) m')
+                        case 3:
+                            masses, points = _collect_particles_3d()
+                            x_cm,y_cm,z_cm,dists = PCoM.DistanceFromCoM3D(masses, points)
+                            print(f'\n  CoM = ({x_cm:.6f}, {y_cm:.6f}, {z_cm:.6f}) m')
+                            for i,(m,d) in enumerate(zip(masses,dists),1):
+                                print(f'    Particle {i}  ({m} kg):  r = {d:.6f} m')
+                        case _: print('\n  That was not a valid option.'); continue
+
+                # ── SECTION 4: Continuous Bodies ────────────────────────────────
+                elif sec == 4:
+                    match choice:
+                        case 1:
+                            L=_ask('  Length L (m): ',cast=float); x0=_ask('  Start x₀ (m, default 0): ',cast=float)
+                            r = PCoM.CoMUniformRod(L, x0)
+                            _step('Uniform rod','x_cm = x₀ + L/2',f'{x0} + {L}/2', r, 'm')
+                            print(f'\n  x_cm = {r:.6f} m')
+                        case 2:
+                            a=_ask('  Rod start x=a (m): ',cast=float); b=_ask('  Rod end x=b (m): ',cast=float)
+                            print('  Enter density function λ(x) as a Python expression (use x):')
+                            expr = input('  λ(x) = ').strip()
+                            lam = lambda x, _e=expr: eval(_e, {'x':x,'math':math})
+                            r = PCoM.CoMLinearDensityRod(a, b, lam)
+                            print(f'\n  x_cm = {r:.6f} m')
+                        case 3:
+                            W=_ask('  Width W (m): ',cast=float); H=_ask('  Height H (m): ',cast=float)
+                            x0=_ask('  Bottom-left x₀ (m): ',cast=float); y0=_ask('  Bottom-left y₀ (m): ',cast=float)
+                            x_cm,y_cm = PCoM.CoMUniformRectangle(W,H,x0,y0)
+                            _step('Rectangle CoM','(x₀+W/2, y₀+H/2)','', f'({x_cm:.4f}, {y_cm:.4f})','m')
+                            print(f'\n  CoM = ({x_cm:.6f}, {y_cm:.6f}) m')
+                        case 4:
+                            b=_ask('  Base b (m): ',cast=float); h=_ask('  Height h (m): ',cast=float)
+                            x0=_ask('  Right-angle x₀: ',cast=float); y0=_ask('  Right-angle y₀: ',cast=float)
+                            x_cm,y_cm = PCoM.CoMRightTriangle(b,h,x0,y0)
+                            _step('Right triangle','(x₀+b/3, y₀+h/3)','', f'({x_cm:.4f},{y_cm:.4f})','m')
+                            print(f'\n  CoM = ({x_cm:.6f}, {y_cm:.6f}) m')
+                        case 5:
+                            r_val=_ask('  Radius r (m): ',cast=float); y0=_ask('  Base y₀ (m): ',cast=float)
+                            _,y_cm = PCoM.CoMSemicircle(r_val, y0)
+                            _step('Solid semicircle','y_cm = y₀ + 4r/(3π)',
+                                  f'{y0} + 4×{r_val}/(3π)', y_cm, 'm')
+                            print(f'\n  y_cm = {y_cm:.6f} m')
+                        case 6:
+                            r_val=_ask('  Radius r (m): ',cast=float); y0=_ask('  Base y₀ (m): ',cast=float)
+                            _,y_cm = PCoM.CoMSemicircularArc(r_val, y0)
+                            _step('Semicircular arc','y_cm = y₀ + 2r/π',
+                                  f'{y0} + 2×{r_val}/π', y_cm, 'm')
+                            print(f'\n  y_cm = {y_cm:.6f} m')
+                        case 7:
+                            r_val=_ask('  Radius r (m): ',cast=float); z0=_ask('  Base z₀ (m): ',cast=float)
+                            z_cm = PCoM.CoMSolidHemisphere(r_val, z0)
+                            _step('Solid hemisphere','z_cm = z₀ + 3r/8',
+                                  f'{z0} + 3×{r_val}/8', z_cm, 'm')
+                            print(f'\n  z_cm = {z_cm:.6f} m')
+                        case 8:
+                            r_val=_ask('  Radius r (m): ',cast=float); z0=_ask('  Base z₀ (m): ',cast=float)
+                            z_cm = PCoM.CoMHollowHemisphere(r_val, z0)
+                            _step('Hollow hemisphere','z_cm = z₀ + r/2',
+                                  f'{z0} + {r_val}/2', z_cm, 'm')
+                            print(f'\n  z_cm = {z_cm:.6f} m')
+                        case 9:
+                            h=_ask('  Height h (m): ',cast=float); z0=_ask('  Base z₀ (m): ',cast=float)
+                            z_cm = PCoM.CoMSolidCone(h, z0)
+                            _step('Solid cone','z_cm = z₀ + h/4',
+                                  f'{z0} + {h}/4', z_cm, 'm')
+                            print(f'\n  z_cm = {z_cm:.6f} m')
+                        case 10:
+                            r_val=_ask('  Radius r (m): ',cast=float)
+                            x_cm,y_cm = PCoM.CoMQuarterCircle(r_val)
+                            _step('Quarter-circle','(4r/3π, 4r/3π)','', f'({x_cm:.4f},{y_cm:.4f})','m')
+                            print(f'\n  CoM = ({x_cm:.6f}, {y_cm:.6f}) m')
+                        case 11:
+                            h=_ask('  Height h (m): ',cast=float); z0=_ask('  Base z₀ (m): ',cast=float)
+                            z_cm = PCoM.CoMHollowConicalShell(h, z0)
+                            _step('Conical shell','z_cm = z₀ + h/3',
+                                  f'{z0} + {h}/3', z_cm, 'm')
+                            print(f'\n  z_cm = {z_cm:.6f} m')
+                        case 12:
+                            h=_ask('  Height h (m): ',cast=float); z0=_ask('  Base z₀ (m): ',cast=float)
+                            z_cm = PCoM.CoMSolidCylinder(h, z0)
+                            print(f'\n  z_cm = {z_cm:.6f} m')
+                        case _: print('\n  That was not a valid option.'); continue
+
+                # ── SECTION 5: Composite Bodies ─────────────────────────────────
+                elif sec == 5:
+                    match choice:
+                        case 1:
+                            print()
+                            _p('Enter each component as (mass, CoM position). Use negative mass for a removed region.')
+                            n = _ask('  Number of components: ', cast=int)
+                            components = []
+                            for i in range(n):
+                                m = _ask(f'  Component {i+1} mass (negative to remove): ', cast=float)
+                                x = _ask(f'  Component {i+1} CoM x: ', cast=float)
+                                components.append((m, x))
+                            r = PCoM.CompositeCoM1D(components)
+                            print(f'\n  Composite x_cm = {r:.6f} m')
+                        case 2:
+                            n = _ask('  Number of components: ', cast=int)
+                            components = []
+                            for i in range(n):
+                                m=_ask(f'  Component {i+1} mass: ',cast=float)
+                                x=_ask(f'  Component {i+1} CoM x: ',cast=float)
+                                y=_ask(f'  Component {i+1} CoM y: ',cast=float)
+                                components.append((m, (x, y)))
+                            x_cm,y_cm = PCoM.CompositeCoM2D(components)
+                            print(f'\n  Composite CoM = ({x_cm:.6f}, {y_cm:.6f}) m')
+                        case 3:
+                            n = _ask('  Number of components: ', cast=int)
+                            components = []
+                            for i in range(n):
+                                m=_ask(f'  m{i+1}: ',cast=float)
+                                x=_ask(f'  x{i+1}: ',cast=float)
+                                y=_ask(f'  y{i+1}: ',cast=float)
+                                z=_ask(f'  z{i+1}: ',cast=float)
+                                components.append((m,(x,y,z)))
+                            x_cm,y_cm,z_cm = PCoM.CompositeCoM3D(components)
+                            print(f'\n  Composite CoM = ({x_cm:.6f}, {y_cm:.6f}, {z_cm:.6f}) m')
+                        case 4:
+                            print()
+                            _p('Rectangle with a circular hole. Hole is treated as negative mass proportional to its area.')
+                            W=_ask('  Rectangle width W (m): ',cast=float); H=_ask('  Rectangle height H (m): ',cast=float)
+                            m_rect=_ask('  Total rectangle mass (kg): ',cast=float)
+                            r_hole=_ask('  Hole radius (m): ',cast=float)
+                            hx=_ask('  Hole centre x (m): ',cast=float); hy=_ask('  Hole centre y (m): ',cast=float)
+                            x_cm,y_cm = PCoM.RemoveCircleFromRectangle(W,H,m_rect,r_hole,hx,hy)
+                            print(f'\n  CoM after hole = ({x_cm:.6f}, {y_cm:.6f}) m')
+                        case 5:
+                            m1=_ask('  m1 (kg): ',cast=float); x1=_ask('  x1 (m): ',cast=float)
+                            m2=_ask('  m2 (kg): ',cast=float); x2=_ask('  x2 (m): ',cast=float)
+                            r = PCoM.TwoHalfSystem(m1,x1,m2,x2)
+                            print(f'\n  Dumbbell CoM x = {r:.6f} m')
+                        case _: print('\n  That was not a valid option.'); continue
+
+                # ── SECTION 6: CoM in Motion ────────────────────────────────────
+                elif sec == 6:
+                    match choice:
+                        case 1:
+                            masses, vels = [], []
+                            n = _ask('  Number of particles: ', cast=int)
+                            for i in range(n):
+                                masses.append(_ask(f'  m{i+1} (kg): ',cast=float))
+                                vels.append(_ask(f'  v{i+1} (m/s): ',cast=float))
+                            v_cm = PCoM.CoMVelocity1D(masses, vels)
+                            _step('CoM velocity','v_cm = Σmᵢvᵢ / M','', v_cm, 'm/s')
+                            print(f'\n  v_cm = {v_cm:.6f} m/s')
+                        case 2:
+                            masses, vels = [], []
+                            n = _ask('  Number of particles: ', cast=int)
+                            for i in range(n):
+                                masses.append(_ask(f'  m{i+1}: ',cast=float))
+                                vx=_ask(f'  vx{i+1}: ',cast=float); vy=_ask(f'  vy{i+1}: ',cast=float)
+                                vels.append((vx,vy))
+                            vx_cm,vy_cm = PCoM.CoMVelocity2D(masses, vels)
+                            print(f'\n  v_cm = ({vx_cm:.6f}, {vy_cm:.6f}) m/s')
+                        case 3:
+                            n = _ask('  Number of particles: ', cast=int)
+                            masses=[_ask(f'  m{i+1}: ',cast=float) for i in range(n)]
+                            forces=[_ask(f'  F{i+1} (N): ',cast=float) for i in range(n)]
+                            a_cm = PCoM.CoMAcceleration(masses, forces)
+                            _step('CoM acceleration','a_cm = F_net / M',
+                                  f'{sum(forces)} / {sum(masses)}', a_cm, 'm/s²')
+                            print(f'\n  a_cm = {a_cm:.6f} m/s²')
+                        case 4:
+                            print()
+                            _p('After an explosion, momentum is conserved so v_cm is unchanged.')
+                            M=_ask('  Total initial mass M (kg): ',cast=float)
+                            v_cm_before=_ask('  Initial v_cm (m/s): ',cast=float)
+                            m1=_ask('  Mass of fragment 1 (kg): ',cast=float)
+                            v1=_ask('  Velocity of fragment 1 (m/s): ',cast=float)
+                            v2, m2 = PCoM.CoMAfterExplosion1D(M, v_cm_before, m1, v1)
+                            _step('Fragment 2 velocity','v2=(M·v_cm − m1·v1)/m2',
+                                  f'({M}·{v_cm_before}−{m1}·{v1})/{m2}', v2, 'm/s')
+                            print(f'\n  m2 = {m2:.4f} kg')
+                            print(f'  v2 = {v2:.6f} m/s')
+                        case 5:
+                            print()
+                            _p('If only internal forces act, CoM stays fixed. Given displacements of all'
+                               ' but the last particle, this finds the last displacement needed.')
+                            masses, positions = _collect_particles_1d()
+                            displacements = []
+                            for i in range(len(masses)-1):
+                                displacements.append(_ask(f'  Δx of particle {i+1} (m): ',cast=float))
+                            delta_last = PCoM.CoMFixedAfterInternalForces(masses, positions, displacements)
+                            print(f'\n  Particle {len(masses)} must move: Δx = {delta_last:.6f} m')
+                        case 6:
+                            n = _ask('  Number of fragments: ', cast=int)
+                            masses=[_ask(f'  m{i+1}: ',cast=float) for i in range(n)]
+                            vels=[_ask(f'  v{i+1}_after: ',cast=float) for i in range(n)]
+                            p_before, p_after, ok = PCoM.ExplosionCoMCheck(masses, vels)
+                            print(f'\n  p_after = {p_after:.6f} kg·m/s')
+                            print(f'  Momentum conserved (p≈0): {"Yes ✓" if ok else "No ✗"}')
+                        case _: print('\n  That was not a valid option.'); continue
+
+                # ── SECTION 7: CoM Frame ────────────────────────────────────────
+                elif sec == 7:
+                    match choice:
+                        case 1:
+                            masses, vels = [], []
+                            n = _ask('  Particles: ', cast=int)
+                            for i in range(n):
+                                masses.append(_ask(f'  m{i+1}: ',cast=float))
+                                vels.append(_ask(f'  v{i+1}: ',cast=float))
+                            v_cm, v_prime = PCoM.CoMFrameVelocities1D(masses, vels)
+                            print(f'\n  v_cm = {v_cm:.6f} m/s  (lab frame)')
+                            print('  CoM-frame velocities:')
+                            for i,(m,vp) in enumerate(zip(masses,v_prime),1):
+                                print(f'    m{i}={m} kg:  v\' = {vp:+.6f} m/s')
+                        case 2:
+                            masses, vels = [], []
+                            n = _ask('  Particles: ', cast=int)
+                            for i in range(n):
+                                masses.append(_ask(f'  m{i+1}: ',cast=float))
+                                vx=_ask(f'  vx{i+1}: ',cast=float); vy=_ask(f'  vy{i+1}: ',cast=float)
+                                vels.append((vx,vy))
+                            (vx_cm,vy_cm), v_prime = PCoM.CoMFrameVelocities2D(masses, vels)
+                            print(f'\n  v_cm = ({vx_cm:.4f}, {vy_cm:.4f}) m/s')
+                            for i,(m,vp) in enumerate(zip(masses,v_prime),1):
+                                print(f'    m{i}: v\' = ({vp[0]:+.4f}, {vp[1]:+.4f}) m/s')
+                        case 3:
+                            masses, vels = [], []
+                            n = _ask('  Particles: ', cast=int)
+                            for i in range(n):
+                                masses.append(_ask(f'  m{i+1}: ',cast=float))
+                                vels.append(_ask(f'  v{i+1}: ',cast=float))
+                            ke_cm, ke_lab, v_cm = PCoM.KineticEnergyCoMFrame1D(masses, vels)
+                            _step('KE lab','½Σmᵢvᵢ²','', ke_lab, 'J')
+                            _step('KE CoM frame','KE_lab − ½M v_cm²',
+                                  f'{ke_lab:.4f} − ½×{sum(masses)}×{v_cm:.4f}²', ke_cm, 'J')
+                            print(f'\n  v_cm     = {v_cm:.6f} m/s')
+                            print(f'  KE (lab) = {ke_lab:.6f} J')
+                            print(f'  KE (CoM) = {ke_cm:.6f} J  (available for inelastic processes)')
+                        case 4:
+                            v1=_ask('  v1 (m/s): ',cast=float); v2=_ask('  v2 (m/s): ',cast=float)
+                            v_rel = PCoM.RelativeVelocity1D(v1, v2)
+                            _step('Relative velocity','v_rel = v1 − v2',f'{v1} − {v2}', v_rel, 'm/s')
+                            print(f'\n  v_rel = {v_rel:.6f} m/s')
+                        case 5:
+                            m1=_ask('  m1 (kg): ',cast=float); m2=_ask('  m2 (kg): ',cast=float)
+                            mu = PCoM.ReducedMass(m1, m2)
+                            _step('Reduced mass','μ = m1·m2/(m1+m2)',
+                                  f'{m1}·{m2}/({m1}+{m2})', mu, 'kg')
+                            print(f'\n  μ = {mu:.6f} kg')
+                        case 6:
+                            m1=_ask('  m1 (kg): ',cast=float); v1=_ask('  v1 (m/s): ',cast=float)
+                            m2=_ask('  m2 (kg): ',cast=float); v2=_ask('  v2 (m/s): ',cast=float)
+                            ke_rel = PCoM.RelativeKE1D(m1,v1,m2,v2)
+                            _step('Relative KE','½μ v_rel²','', ke_rel, 'J')
+                            print(f'\n  KE_rel = {ke_rel:.6f} J')
+                        case _: print('\n  That was not a valid option.'); continue
+
+                # ── SECTION 8: Moment of Inertia ────────────────────────────────
+                elif sec == 8:
+                    match choice:
+                        case 1:
+                            n = _ask('  Point masses: ', cast=int)
+                            masses=[_ask(f'  m{i+1}: ',cast=float) for i in range(n)]
+                            rs=[_ask(f'  r{i+1} from axis: ',cast=float) for i in range(n)]
+                            I = PCoM.MomentOfInertiaPointMasses(masses, rs)
+                            _step('I','I = Σmᵢrᵢ²','', I, 'kg·m²')
+                            print(f'\n  I = {I:.6f} kg·m²')
+                        case 2:
+                            I_cm=_ask('  I_cm (kg·m²): ',cast=float)
+                            m=_ask('  Mass m (kg): ',cast=float)
+                            d=_ask('  Distance d from CoM to new axis (m): ',cast=float)
+                            I = PCoM.ParallelAxisTheorem(I_cm, m, d)
+                            _step('Parallel axis','I = I_cm + md²',
+                                  f'{I_cm} + {m}×{d}²', I, 'kg·m²')
+                            print(f'\n  I = {I:.6f} kg·m²')
+                        case 3:
+                            Ix=_ask('  I_x (kg·m²): ',cast=float); Iy=_ask('  I_y (kg·m²): ',cast=float)
+                            Iz = PCoM.PerpendiculaAxisTheorem(Ix, Iy)
+                            _step('Perp. axis','I_z = I_x + I_y',f'{Ix}+{Iy}', Iz, 'kg·m²')
+                            print(f'\n  I_z = {Iz:.6f} kg·m²')
+                        case 4:
+                            print()
+                            print('  Shapes:')
+                            print('  (1)  Solid sphere  2mr²/5')
+                            print('  (2)  Hollow sphere  2mr²/3')
+                            print('  (3)  Solid cylinder  mr²/2  (symmetry axis)')
+                            print('  (4)  Hollow cylinder  mr²   (symmetry axis)')
+                            print('  (5)  Thin rod about centre  mL²/12')
+                            print('  (6)  Thin rod about end      mL²/3')
+                            print('  (7)  Rectangular plate       m(w²+h²)/12')
+                            print()
+                            shape = _menu_int('  Shape: ')
+                            m = _ask('  Mass m (kg): ', cast=float)
+                            if shape in (1,2,3,4):
+                                r_val = _ask('  Radius r (m): ', cast=float)
+                                fns = {1:PCoM.I_SolidSphere, 2:PCoM.I_HollowSphere,
+                                       3:PCoM.I_SolidCylinder, 4:PCoM.I_HollowCylinder}
+                                I = fns[shape](m, r_val) if shape in fns else 0
+                            elif shape in (5,6):
+                                L_val = _ask('  Length L (m): ', cast=float)
+                                I = PCoM.I_ThinRod_Center(m,L_val) if shape==5 else PCoM.I_ThinRod_End(m,L_val)
+                            elif shape == 7:
+                                w=_ask('  Width w: ',cast=float); h=_ask('  Height h: ',cast=float)
+                                I = PCoM.I_RectangularPlate(m, w, h)
+                            else:
+                                print('\n  Invalid shape.'); continue
+                            print(f'\n  I_cm = {I:.6f} kg·m²')
+                        case 5:
+                            print()
+                            _p('Enter each component as (I_cm, mass, distance to common axis).')
+                            n = _ask('  Components: ', cast=int)
+                            comps = []
+                            for i in range(n):
+                                I_c=_ask(f'  I_cm{i+1}: ',cast=float)
+                                m_c=_ask(f'  m{i+1}: ',cast=float)
+                                d_c=_ask(f'  d{i+1} (distance to common axis): ',cast=float)
+                                comps.append((I_c,m_c,d_c))
+                            I_total = PCoM.AxisShiftCombined(comps)
+                            print(f'\n  I_total = {I_total:.6f} kg·m²')
+                        case _: print('\n  That was not a valid option.'); continue
+
+                # ── SECTION 9: Word Problem Solver ──────────────────────────────
+                elif sec == 9:
+                    match choice:
+                        case 1:
+                            print()
+                            _p('Type or paste a 1D CoM problem. I will extract masses and positions.')
+                            _p('Example: "A 2 kg mass at position 1 m and a 5 kg mass at position 4 m."')
+                            print()
+                            raw = input('  Problem: ').strip()
+                            r = PCoM.ParseCoMProblem1D(raw)
+                            if r is None:
+                                print('\n  ✗  Could not extract values from that sentence.')
+                                print('  Tip: include "N kg at X m" or "m=N x=M" pairs.')
+                            else:
+                                print(f'\n  ✓  Extracted {len(r["masses"])} particle(s):')
+                                for i,(m,x) in enumerate(zip(r['masses'],r['positions']),1):
+                                    print(f'    Particle {i}:  m = {m} kg   x = {x} m')
+                                print()
+                                _show_steps(PCoM.StepByStepCoM1D(r['masses'], r['positions']))
+                                print(f'  M_total = {r["M_total"]:.4f} kg')
+                                print(f'  Σmᵢxᵢ  = {r["weighted_sum"]:.4f} kg·m')
+                                print(f'  x_cm    = {r["x_cm"]:.6f} m')
+                        case 2:
+                            print()
+                            _p('Type or paste a 2D CoM problem.')
+                            _p('Example: "3 kg at (1,2) and 5 kg at (4,6)"')
+                            print()
+                            raw = input('  Problem: ').strip()
+                            r = PCoM.ParseCoMProblem2D(raw)
+                            if r is None:
+                                print('\n  ✗  Could not parse. Try "N kg at (X, Y)" format.')
+                            else:
+                                print(f'\n  ✓  Extracted {len(r["masses"])} particle(s):')
+                                for i,(m,p) in enumerate(zip(r['masses'],r['points']),1):
+                                    print(f'    Particle {i}:  m={m} kg  at ({p[0]}, {p[1]}) m')
+                                _show_steps(PCoM.StepByStepCoM2D(r['masses'], r['points']))
+                                print(f'  CoM = ({r["x_cm"]:.6f}, {r["y_cm"]:.6f}) m')
+                        case 3:
+                            print()
+                            _p('Explosion / split problem.  The CoM velocity is conserved.')
+                            _p('Enter the system state before and one fragment\'s velocity after.')
+                            M=_ask('  Total mass M (kg): ',cast=float)
+                            v_cm=_ask('  v_cm before explosion (m/s): ',cast=float)
+                            m1=_ask('  Mass of known fragment m1 (kg): ',cast=float)
+                            v1=_ask('  Velocity of m1 after (m/s): ',cast=float)
+                            v2, m2 = PCoM.CoMAfterExplosion1D(M, v_cm, m1, v1)
+                            print(f'\n  Fragment 2:  m2 = {m2:.4f} kg   v2 = {v2:.6f} m/s')
+                            print()
+                            print('  Verification:')
+                            p_total = m1*v1 + m2*v2
+                            p_orig  = M*v_cm
+                            print(f'    p_before = {p_orig:.4f} kg·m/s')
+                            print(f'    p_after  = {p_total:.4f} kg·m/s')
+                            print(f'    Conserved: {"Yes ✓" if abs(p_total-p_orig)<1e-6 else "No ✗"}')
+                        case _: print('\n  That was not a valid option.'); continue
+
             except _AskAbort:
                 print()
                 _p('Calculation cancelled. Returning to the function list.')

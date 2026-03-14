@@ -22,6 +22,9 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Config\MathCodeEngine.py" />
+    <Compile Include="Config\MathCodeMonitor.py" />
+    <Compile Include="MathCoreUI.py" />
     <Compile Include="MathTypes\Advanced\AbstractAlgebra.py" />
     <Compile Include="MathTypes\Advanced\AlgebraicGeometry.py" />
     <Compile Include="MathTypes\Advanced\Calculus.py">
@@ -75,6 +78,7 @@
     <Compile Include="MathTypes\Physics\Physics_Momentum.py" />
     <Compile Include="MathTypes\Physics\Physics_Springs.py" />
     <Compile Include="MathTypes\Advanced\Topology.py" />
+    <Compile Include="MathTypes\Physics\Physics_CenterOfMass.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="MathTypes\Basic\" />
